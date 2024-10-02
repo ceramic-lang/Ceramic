@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -e
+
+clang-format -i Source/*.c
+
+rm -rf "Build"
+mkdir "Build"
+
+clang \
+	-o "Build/ceramic" \
+	-fmodules \
+	-g3 \
+	-fsanitize=undefined \
+	-W \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Wconversion \
+	-Wimplicit-fallthrough \
+	-Wmissing-prototypes \
+	-Wshadow \
+	-Wstrict-prototypes \
+	"Source/Entry Point.c"
