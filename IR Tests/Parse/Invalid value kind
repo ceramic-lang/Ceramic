@@ -1,0 +1,9 @@
+func entryPoint {
+	x = 92 abc, def
+}
+===
+func entryPoint {
+}
+error at 23..25: expected identifier but found number
+error at 26..29: unknown value “abc”
+error at 31..34: unknown value “def”

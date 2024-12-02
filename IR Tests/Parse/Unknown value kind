@@ -1,0 +1,11 @@
+func entryPoint {
+	x = ConstantInt32 0
+	a = Foo x, x
+	b = Bar x, x
+}
+===
+func entryPoint {
+	v0 = ConstantInt32 0
+}
+error at 44..47: unknown value kind “Foo”
+error at 58..61: unknown value kind “Bar”

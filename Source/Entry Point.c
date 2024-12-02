@@ -1,17 +1,29 @@
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/attr.h>
 #include <sys/fcntl.h>
 #include <unistd.h>
 
 #include "Core.h"
+#include "Strings.h"
+#include "File System.h"
+#include "IR.h"
+
+#include "Core.c"
+#include "Strings.c"
+#include "File System.c"
+#include "IR.c"
 
 s32
 main(void)
 {
+	IRTests();
+
 	u32 machine_code[] = {
 	        0xd2800b80, // mov x0, #92
 	        0xd65f03c0, // ret

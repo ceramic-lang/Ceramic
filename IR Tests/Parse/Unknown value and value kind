@@ -1,0 +1,9 @@
+func entryPoint {
+	x = Foo y, z
+}
+===
+func entryPoint {
+}
+error at 23..26: unknown value kind “Foo”
+error at 27..28: unknown value “y”
+error at 30..31: unknown value “z”
