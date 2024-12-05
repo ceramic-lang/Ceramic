@@ -564,11 +564,134 @@ IRPrint(IR *ir)
 	return StringListJoin(list);
 }
 
+typedef struct ValueMapNode ValueMapNode;
+struct ValueMapNode
+{
+	ValueMapNode *next;
+	Value *value;
+	Value *new;
+};
+
+typedef struct ValueMap ValueMap;
+struct ValueMap
+{
+	ValueMapNode *first;
+	ValueMapNode *last;
+};
+
+function ValueMapNode *
+ValueMapGet(ValueMap *map, Value *value)
+{
+	Assert(value != 0);
+	ValueMapNode *result = 0;
+	for (ValueMapNode *node = map->first; node != 0; node = node->next)
+	{
+		if (node->value == value)
+		{
+			result = node;
+			break;
+		}
+	}
+	return result;
+}
+
+function ValueMapNode *
+ValueMapInsert(ValueMap *map, Value *value)
+{
+	Assert(value != 0);
+	ValueMapNode *result = ValueMapGet(map, value);
+	if (result == 0)
+	{
+		result = calloc(1, (umm)size_of(ValueMapNode));
+		result->value = value;
+		if (map->first == 0)
+		{
+			map->first = result;
+		}
+		else
+		{
+			map->last->next = result;
+		}
+		map->last = result;
+	}
+	return result;
+}
+
+function IR *
+DeadCodeElimination(IR *ir)
+{
+	IR *result = calloc(1, (umm)size_of(IR));
+
+	for (Function *func = ir->first_function; func != 0; func = func->next)
+	{
+		Function *new_func = calloc(1, (umm)size_of(Function));
+		new_func->name = func->name;
+
+		if (result->first_function == 0)
+		{
+			result->first_function = new_func;
+		}
+		else
+		{
+			result->last_function->next = new_func;
+		}
+		result->last_function = new_func;
+		result->function_count++;
+
+		ValueMap used_values = {0};
+		for (Value *value = func->first_value; value != 0; value = value->next)
+		{
+			if (value->kind != ValueKind_ConstantInt32)
+			{
+				ValueMapInsert(&used_values, value->lhs);
+				ValueMapInsert(&used_values, value->rhs);
+			}
+		}
+		for (Value *value = func->first_value; value != 0; value = value->next)
+		{
+			ValueMapNode *map_node = ValueMapGet(&used_values, value);
+			if (map_node != 0)
+			{
+				Value *new_value = calloc(1, (umm)size_of(Value));
+				new_value->kind = value->kind;
+
+				if (value->kind == ValueKind_ConstantInt32)
+				{
+					new_value->constant = value->constant;
+				}
+				else
+				{
+					new_value->lhs = ValueMapGet(&used_values, value->lhs)->new;
+					new_value->rhs = ValueMapGet(&used_values, value->rhs)->new;
+					Assert(new_value->lhs != 0);
+					Assert(new_value->rhs != 0);
+				}
+				map_node->new = new_value;
+
+				if (new_func->first_value == 0)
+				{
+					new_func->first_value = new_value;
+				}
+				else
+				{
+					new_func->last_value->next = new_value;
+				}
+				new_func->last_value = new_value;
+				new_func->value_count++;
+			}
+		}
+	}
+
+	return result;
+}
+
+typedef IR *(*IRTransformer)(IR *ir);
+
 function void
-IRTests(void)
+IRTest(String category, String subcategory, IRTransformer transformer)
 {
 	DirectoryIterator iterator = {0};
-	DirectoryIterate(&iterator, S("IR Tests/Parse"));
+	DirectoryIterate(&iterator, PushStringF("%.*s/%.*s", SF(category), SF(subcategory)));
 
 	for (DirectoryEntry entry = {0}; DirectoryIteratorNext(&iterator, &entry); MemoryZeroStruct(&entry))
 	{
@@ -579,17 +702,29 @@ IRTests(void)
 
 		DiagnosticList diagnostics = {0};
 		IR *ir = IRParse(source, &diagnostics);
-		String actual_output = PushStringF("%.*s%.*s", SF(IRPrint(ir)), SF(DiagnosticListPrint(&diagnostics)));
+		if (transformer != 0)
+		{
+			ir = transformer(ir);
+		}
 
+		String actual_output = PushStringF("%.*s%.*s", SF(IRPrint(ir)), SF(DiagnosticListPrint(&diagnostics)));
+		String test_name = PushStringF("%.*s > %.*s > %.*s", SF(category), SF(subcategory), SF(entry.name));
 		if (!StringEqual(expected_output, actual_output))
 		{
-			printf("(Fail) %.*s\n", SF(entry.name));
+			printf("Fail: %.*s\n", SF(test_name));
 			printf("expected:\n%.*sactual:\n%.*s", SF(expected_output), SF(actual_output));
 			Assert(0);
 		}
 		else
 		{
-			printf("(Pass) %.*s\n", SF(entry.name));
+			printf("Pass: %.*s\n", SF(test_name));
 		}
 	}
+}
+
+function void
+IRTests(void)
+{
+	IRTest(S("IR Tests"), S("Parse"), 0);
+	IRTest(S("IR Tests"), S("Dead Code Elimination"), DeadCodeElimination);
 }

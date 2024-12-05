@@ -1,0 +1,6 @@
+func entryPoint {
+	x = ConstantInt32 0
+}
+===
+func entryPoint {
+}
