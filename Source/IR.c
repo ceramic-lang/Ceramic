@@ -1,3 +1,40 @@
+function Span
+SpanUnion(Span a, Span b)
+{
+	Span result = {0};
+	smm a_end = a.start + a.length;
+	smm b_end = b.start + b.length;
+	result.start = a.start < b.start ? a.start : b.start;
+	smm result_end = a_end > b_end ? a_end : b_end;
+	result.length = result_end - result.start;
+	return result;
+}
+
+function ValueSignature
+ValueSignatureFromValueKind(ValueKind kind)
+{
+	ValueSignature result = {0};
+
+	switch (kind)
+	{
+		case ValueKind_ConstantInt32:
+		{
+			result.argument_count = 1;
+			result.argument_kinds[0] = ValueArgumentKind_Constant;
+			break;
+		}
+
+		default:
+		{
+			result.argument_count = 2;
+			result.argument_kinds[0] = ValueArgumentKind_Value;
+			result.argument_kinds[1] = ValueArgumentKind_Value;
+		}
+	}
+
+	return result;
+}
+
 typedef enum IRTokenKind
 {
 	IRTokenKind_Eof,
@@ -243,6 +280,7 @@ struct IRParser
 	String string;
 	IRToken *current;
 	IRToken *previous;
+	smm check_count;
 	DiagnosticList *diagnostics;
 
 	ValueNameList value_names;
@@ -252,9 +290,26 @@ function IRTokenKind
 IRParserCurrent(IRParser *parser)
 {
 	IRTokenKind result = IRTokenKind_Eof;
+	parser->check_count++;
+	Assert(parser->check_count < 128);
 	if (parser->current != 0)
 	{
 		result = parser->current->kind;
+	}
+	return result;
+}
+
+function Span
+IRParserCurrentSpan(IRParser *parser)
+{
+	Span result = {0};
+	if (parser->current == 0)
+	{
+		result.start = parser->string.length;
+	}
+	else
+	{
+		result = parser->current->span;
 	}
 	return result;
 }
@@ -274,10 +329,16 @@ IRParserAtEof(IRParser *parser)
 function String
 IRParserBumpAny(IRParser *parser)
 {
-	Span span = parser->current->span;
-	parser->previous = parser->current;
-	parser->current = parser->current->next;
-	return StringSlice(parser->string, span.start, span.length);
+	String result = {0};
+	if (!IRParserAtEof(parser))
+	{
+		parser->check_count = 0;
+		Span span = parser->current->span;
+		parser->previous = parser->current;
+		parser->current = parser->current->next;
+		result = StringSlice(parser->string, span.start, span.length);
+	}
+	return result;
 }
 
 function String
@@ -287,50 +348,67 @@ IRParserBump(IRParser *parser, IRTokenKind kind)
 	return IRParserBumpAny(parser);
 }
 
+function b32
+IRParserEat(IRParser *parser, IRTokenKind kind, String *string)
+{
+	b32 result = IRParserAt(parser, kind);
+
+	if (string != 0)
+	{
+		MemoryZeroStruct(string);
+	}
+
+	if (result)
+	{
+		String s = IRParserBump(parser, kind);
+		if (string != 0)
+		{
+			*string = s;
+		}
+	}
+
+	return result;
+}
+
 function void
-IRParserError(IRParser *parser, String message)
+IRParserErrorWithSpan(IRParser *parser, Span span, String message)
 {
 	Diagnostic *diagnostic = calloc(1, (umm)size_of(Diagnostic));
 	diagnostic->severity = DiagnosticSeverity_Error;
-	if (parser->current == 0)
-	{
-		diagnostic->span.start = parser->string.length;
-	}
-	else
-	{
-		diagnostic->span = parser->current->span;
-	}
+	diagnostic->span = span;
 	diagnostic->message = message;
 	DiagnosticListPush(parser->diagnostics, diagnostic);
 }
 
 function void
+IRParserError(IRParser *parser, String message)
+{
+	Span span = IRParserCurrentSpan(parser);
+	IRParserErrorWithSpan(parser, span, message);
+}
+
+function void
 IRParserErrorPrevious(IRParser *parser, String message)
 {
-	Diagnostic *diagnostic = calloc(1, (umm)size_of(Diagnostic));
-	diagnostic->severity = DiagnosticSeverity_Error;
-	Assert(parser->previous != 0);
-	diagnostic->span = parser->previous->span;
-	diagnostic->message = message;
-	DiagnosticListPush(parser->diagnostics, diagnostic);
+	Span span = parser->previous->span;
+	IRParserErrorWithSpan(parser, span, message);
 }
 
 function String
 IRParserExpect(IRParser *parser, IRTokenKind kind)
 {
 	String result = {0};
-	if (IRParserAt(parser, kind))
+	if (!IRParserEat(parser, kind, &result))
 	{
-		result = IRParserBump(parser, kind);
-	}
-	else if (IRParserAtEof(parser))
-	{
-		IRParserError(parser, PushStringF("missing %.*s", SF(IRTokenKindName(kind))));
-	}
-	else
-	{
-		IRParserError(parser, PushStringF("expected %.*s but found %.*s", SF(IRTokenKindName(kind)),
-		                              SF(IRTokenKindName(IRParserCurrent(parser)))));
+		if (IRParserAtEof(parser))
+		{
+			IRParserError(parser, PushStringF("missing %.*s", SF(IRTokenKindName(kind))));
+		}
+		else
+		{
+			IRParserError(parser, PushStringF("expected %.*s but found %.*s", SF(IRTokenKindName(kind)),
+			                              SF(IRTokenKindName(IRParserCurrent(parser)))));
+		}
 		IRParserBumpAny(parser);
 	}
 	return result;
@@ -424,40 +502,120 @@ IRParse(String string, DiagnosticList *diagnostics)
 					IRParserErrorPrevious(&parser, PushStringF("unknown value kind “%.*s”", SF(value_kind_name)));
 				}
 
-				u64 constant = 0;
-				Value *lhs = 0;
-				Value *rhs = 0;
-				if (value_kind == ValueKind_ConstantInt32)
+				ValueArgument *first_argument = 0;
+				ValueArgument *last_argument = 0;
+				smm argument_count = 0;
+				b32 failed_to_resolve_any = 0;
+
+				Span argument_start_span = IRParserCurrentSpan(&parser);
+
+				for (;;)
 				{
-					String constant_string = IRParserExpect(&parser, IRTokenKind_Number);
-					Assert(U64FromString(constant_string, &constant));
-				}
-				else
-				{
-					String lhs_name = IRParserExpect(&parser, IRTokenKind_Identifier);
-					lhs = IRParserResolveValue(&parser, lhs_name);
-
-					IRParserExpect(&parser, IRTokenKind_Comma);
-
-					String rhs_name = IRParserExpect(&parser, IRTokenKind_Identifier);
-					rhs = IRParserResolveValue(&parser, rhs_name);
-
-					if (lhs == 0 || rhs == 0)
+					if (IRParserAtEof(&parser) || (first_argument != 0 && !IRParserEat(&parser, IRTokenKind_Comma, 0)))
 					{
-						continue;
+						break;
+					}
+
+					ValueArgument *argument = 0;
+					switch (IRParserCurrent(&parser))
+					{
+						case IRTokenKind_Identifier:
+						{
+							argument = calloc(1, (umm)size_of(ValueArgument));
+							argument->span = IRParserCurrentSpan(&parser);
+							String name = IRParserBump(&parser, IRTokenKind_Identifier);
+							argument->value = IRParserResolveValue(&parser, name);
+							failed_to_resolve_any |= argument->value == 0;
+							break;
+						}
+
+						case IRTokenKind_Number:
+						{
+							argument = calloc(1, (umm)size_of(ValueArgument));
+							argument->span = IRParserCurrentSpan(&parser);
+							String constant = IRParserBump(&parser, IRTokenKind_Number);
+							Assert(U64FromString(constant, &argument->constant));
+							break;
+						}
+
+						default:
+						{
+							IRParserError(&parser, S("expected value name or constant"));
+							IRParserBumpAny(&parser);
+							break;
+						}
+					}
+
+					if (argument != 0)
+					{
+						if (first_argument == 0)
+						{
+							first_argument = argument;
+						}
+						else
+						{
+							last_argument->next = argument;
+						}
+						last_argument = argument;
+						argument_count++;
 					}
 				}
 
-				if (value_kind == (ValueKind)-1)
+				if (value_kind == (ValueKind)-1 || failed_to_resolve_any)
+				{
+					continue;
+				}
+
+				Span argument_end_span = parser.previous->span;
+				Span value_span = SpanUnion(argument_start_span, argument_end_span);
+
+				ValueSignature value_signature = ValueSignatureFromValueKind(value_kind);
+				if (argument_count != value_signature.argument_count)
+				{
+					IRParserErrorWithSpan(&parser, value_span,
+					        PushStringF("expected %td arguments to value but found %td", value_signature.argument_count,
+					                argument_count));
+					continue;
+				}
+
+				smm argument_index = -1;
+				b32 any_mismatched_types = 0;
+				for (ValueArgument *argument = first_argument; argument != 0; argument = argument->next)
+				{
+					argument_index++;
+
+					ValueArgumentKind actual_argument_kind = ValueArgumentKind_Value;
+					if (argument->value == 0)
+					{
+						actual_argument_kind = ValueArgumentKind_Constant;
+					}
+
+					Assert(argument_index < ArrayCount(value_signature.argument_kinds));
+					ValueArgumentKind expected_argument_kind = value_signature.argument_kinds[argument_index];
+
+					if (actual_argument_kind != expected_argument_kind)
+					{
+						Assert(actual_argument_kind < ValueArgumentKind__Count);
+						Assert(expected_argument_kind < ValueArgumentKind__Count);
+						String actual_kind_name = value_argument_kind_names[actual_argument_kind];
+						String expected_kind_name = value_argument_kind_names[expected_argument_kind];
+						String message = PushStringF(
+						        "expected %.*s but found %.*s", SF(expected_kind_name), SF(actual_kind_name));
+						IRParserErrorWithSpan(&parser, argument->span, message);
+						any_mismatched_types = 1;
+					}
+				}
+
+				if (any_mismatched_types)
 				{
 					continue;
 				}
 
 				Value *value = calloc(1, (umm)size_of(Value));
 				value->kind = value_kind;
-				value->lhs = lhs;
-				value->rhs = rhs;
-				value->constant = constant;
+				value->first_argument = first_argument;
+				value->last_argument = last_argument;
+				value->argument_count = argument_count;
 				if (func->first_value == 0)
 				{
 					func->first_value = value;
@@ -544,15 +702,21 @@ IRPrint(IR *ir)
 			Assert(value->kind < ValueKind__Count);
 			StringListPushF(&list, "%.*s ", SF(value_kind_names[value->kind]));
 
-			if (value->kind == ValueKind_ConstantInt32)
+			for (ValueArgument *argument = value->first_argument; argument != 0; argument = argument->next)
 			{
-				StringListPushF(&list, "%llu", value->constant);
-			}
-			else
-			{
-				String lhs_name = ValueName(value->lhs, indexed_values, func->value_count, &next_value_index);
-				String rhs_name = ValueName(value->rhs, indexed_values, func->value_count, &next_value_index);
-				StringListPushF(&list, "%.*s, %.*s", SF(lhs_name), SF(rhs_name));
+				if (argument->value == 0)
+				{
+					StringListPushF(&list, "%llu", argument->constant);
+				}
+				else
+				{
+					String name = ValueName(argument->value, indexed_values, func->value_count, &next_value_index);
+					StringListPushF(&list, "%.*s", SF(name));
+				}
+				if (argument->next != 0)
+				{
+					StringListPush(&list, S(", "));
+				}
 			}
 
 			StringListPush(&list, S("\n"));
@@ -641,10 +805,12 @@ DeadCodeElimination(IR *ir)
 		ValueMap used_values = {0};
 		for (Value *value = func->first_value; value != 0; value = value->next)
 		{
-			if (value->kind != ValueKind_ConstantInt32)
+			for (ValueArgument *argument = value->first_argument; argument != 0; argument = argument->next)
 			{
-				ValueMapInsert(&used_values, value->lhs);
-				ValueMapInsert(&used_values, value->rhs);
+				if (argument->value != 0)
+				{
+					ValueMapInsert(&used_values, argument->value);
+				}
 			}
 		}
 		for (Value *value = func->first_value; value != 0; value = value->next)
@@ -655,17 +821,31 @@ DeadCodeElimination(IR *ir)
 				Value *new_value = calloc(1, (umm)size_of(Value));
 				new_value->kind = value->kind;
 
-				if (value->kind == ValueKind_ConstantInt32)
+				for (ValueArgument *argument = value->first_argument; argument != 0; argument = argument->next)
 				{
-					new_value->constant = value->constant;
+					ValueArgument *new_argument = calloc(1, (umm)size_of(ValueArgument));
+					if (argument->value == 0)
+					{
+						new_argument->constant = argument->constant;
+					}
+					else
+					{
+						new_argument->value = ValueMapGet(&used_values, argument->value)->new;
+						Assert(new_argument->value != 0);
+					}
+
+					if (new_value->first_argument == 0)
+					{
+						new_value->first_argument = new_argument;
+					}
+					else
+					{
+						new_value->last_argument->next = new_argument;
+					}
+					new_value->last_argument = new_argument;
+					new_value->argument_count++;
 				}
-				else
-				{
-					new_value->lhs = ValueMapGet(&used_values, value->lhs)->new;
-					new_value->rhs = ValueMapGet(&used_values, value->rhs)->new;
-					Assert(new_value->lhs != 0);
-					Assert(new_value->rhs != 0);
-				}
+
 				map_node->new = new_value;
 
 				if (new_func->first_value == 0)

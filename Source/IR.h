@@ -1,3 +1,12 @@
+typedef struct Span Span;
+struct Span
+{
+	smm start;
+	smm length;
+};
+
+function Span SpanUnion(Span a, Span b);
+
 typedef enum ValueKind
 {
 	ValueKind_ConstantInt32,
@@ -7,13 +16,44 @@ typedef enum ValueKind
 
 global read_only String value_kind_names[] = {S("ConstantInt32"), S("AddInt32")};
 
+typedef enum ValueArgumentKind
+{
+	ValueArgumentKind_Value,
+	ValueArgumentKind_Constant,
+	ValueArgumentKind__Count,
+} ValueArgumentKind;
+
+global read_only String value_argument_kind_names[] = {S("value"), S("constant")};
+
+typedef struct ValueSignature ValueSignature;
+struct ValueSignature
+{
+	smm argument_count;
+	ValueArgumentKind argument_kinds[2];
+};
+
+function ValueSignature ValueSignatureFromValueKind(ValueKind kind);
+global read_only ValueSignature value_signatures[] = {
+        {1, {ValueArgumentKind_Constant}},
+        {2, {ValueArgumentKind_Value, ValueArgumentKind_Value}},
+};
+
 typedef struct Value Value;
+typedef struct ValueArgument ValueArgument;
+struct ValueArgument
+{
+	ValueArgument *next;
+	Value *value;
+	u64 constant;
+	Span span;
+};
+
 struct Value
 {
 	Value *next;
-	Value *lhs;
-	Value *rhs;
-	u64 constant;
+	ValueArgument *first_argument;
+	ValueArgument *last_argument;
+	smm argument_count;
 	ValueKind kind;
 };
 
@@ -33,13 +73,6 @@ struct IR
 	Function *first_function;
 	Function *last_function;
 	smm function_count;
-};
-
-typedef struct Span Span;
-struct Span
-{
-	smm start;
-	smm length;
 };
 
 typedef enum DiagnosticSeverity

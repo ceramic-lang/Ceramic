@@ -1,0 +1,9 @@
+func entryPoint {
+	x = ConstantInt32 0
+	y = ConstantInt32 x
+}
+===
+func entryPoint {
+	v0 = ConstantInt32 0
+}
+error at 58..59: expected constant but found value
