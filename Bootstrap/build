@@ -1,0 +1,15 @@
+#!/bin/sh
+
+cd "$(dirname "$(readlink -f "$0")")" || exit
+clang-format -i ./*.c
+clang \
+	-Wall \
+	-Wextra \
+	-Wpedantic \
+	-Wconversion \
+	-Wimplicit-fallthrough \
+	-Wmissing-prototypes \
+	-Wshadow \
+	-Wstrict-prototypes \
+	-o "ceramic" \
+	"main.c"

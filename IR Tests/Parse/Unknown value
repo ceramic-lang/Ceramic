@@ -1,8 +1,0 @@
-func entryPoint {
-	x = AddInt32 y, z
-}
-===
-func entryPoint {
-}
-error at 32..33: unknown value “y”
-error at 35..36: unknown value “z”

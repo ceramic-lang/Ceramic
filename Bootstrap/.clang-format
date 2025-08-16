@@ -6,15 +6,12 @@ AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
-AlwaysBreakAfterDefinitionReturnType: All
 BinPackParameters: false
-BreakBeforeBraces: Allman
 ColumnLimit: 120
 ContinuationIndentWidth: 8
 IndentCaseLabels: true
-IndentWidth: 4
+IndentWidth: 8
 InsertNewlineAtEOF: true
-ObjCBlockIndentWidth: 4
 SortIncludes: Never
-TabWidth: 4
+TabWidth: 8
 UseTab: ForIndentation
