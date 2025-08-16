@@ -11,5 +11,7 @@ clang \
 	-Wmissing-prototypes \
 	-Wshadow \
 	-Wstrict-prototypes \
+	-fsanitize=address,undefined \
+	-g \
 	-o "ceramic" \
 	"main.c"
