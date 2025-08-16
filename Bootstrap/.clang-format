@@ -1,7 +1,7 @@
 AlignAfterOpenBracket: DontAlign
 AlignEscapedNewlines: DontAlign
 AlignTrailingComments: false
-AllowShortCaseLabelsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortLoopsOnASingleLine: true
