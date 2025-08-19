@@ -20,6 +20,7 @@ enum token_kind {
 	token_kind_asterisk,
 	token_kind_slash,
 	token_kind_eof,
+	token_kind__last,
 };
 
 static char *const token_kind_strings[] = {
@@ -113,16 +114,66 @@ static struct tokens lex(char *s) {
 	return result;
 }
 
-struct expr {
-	uint64_t lhs;
-	uint64_t rhs;
-	enum token_kind op;
+enum node_kind {
+	node_kind_nil,
+	node_kind_root,
+	node_kind_number,
+	node_kind_add,
+	node_kind_sub,
+	node_kind_mul,
+	node_kind_div,
 };
+
+static char *const node_kind_strings[] = {
+        [node_kind_nil] = "nil",
+        [node_kind_root] = "root",
+        [node_kind_number] = "number",
+        [node_kind_add] = "add",
+        [node_kind_sub] = "sub",
+        [node_kind_mul] = "mul",
+        [node_kind_div] = "div",
+};
+
+struct node {
+	struct node *next;
+	struct node *prev;
+	struct node *children;
+	enum node_kind kind;
+	uint64_t value;
+};
+
+static struct node *node_create(enum node_kind kind) {
+	struct node *node = calloc(1, sizeof(struct node));
+	node->kind = kind;
+	node->children = calloc(1, sizeof(struct node));
+	node->children->next = node->children;
+	node->children->prev = node->children;
+	return node;
+}
+
+static void node_add_child(struct node *node, struct node *child) {
+	child->prev = node->children->prev;
+	child->next = node->children;
+	child->prev->next = child;
+	child->next->prev = child;
+}
+
+static void node_print_with_indentation(struct node *node, size_t indentation) {
+	for (size_t i = 0; i < indentation; i++) fprintf(stderr, "\t");
+	fprintf(stderr, "%s (%llu)\n", node_kind_strings[node->kind], node->value);
+	for (struct node *child = node->children->next; child != node->children; child = child->next) {
+		node_print_with_indentation(child, indentation + 1);
+	}
+}
+
+__attribute__((unused)) static void node_print(struct node *node) {
+	node_print_with_indentation(node, 0);
+}
 
 struct parser {
 	struct token *token;
 	size_t remaining_tokens;
-	struct expr expr;
+	struct node *root;
 };
 
 static uint64_t parse_number(char *s) {
@@ -165,68 +216,76 @@ static struct token *parser_expect(struct parser *p, enum token_kind kind) {
 }
 
 static void parse_expr(struct parser *p) {
-	struct token *lhs = parser_expect(p, token_kind_number);
+	struct token *lhs_token = parser_expect(p, token_kind_number);
+	struct node *lhs = node_create(node_kind_number);
+	lhs->value = parse_number(lhs_token->string);
 
-	struct token *op = 0;
-	switch (parser_current(p)) {
-	case token_kind_plus:
-	case token_kind_hyphen:
-	case token_kind_asterisk:
-	case token_kind_slash:
-		op = parser_bump(p, parser_current(p));
-		break;
+	static const enum node_kind node_kinds[token_kind__last] = {
+	        [token_kind_plus] = node_kind_add,
+	        [token_kind_hyphen] = node_kind_sub,
+	        [token_kind_asterisk] = node_kind_mul,
+	        [token_kind_slash] = node_kind_div,
+	};
 
-	default:
+	enum node_kind expr_node_kind = node_kinds[parser_current(p)];
+	if (expr_node_kind == 0) {
 		printf("%zu: expected operator\n", p->token->line);
 		exit(1);
-		break;
 	}
+	parser_bump(p, parser_current(p));
 
-	struct token *rhs = parser_expect(p, token_kind_number);
+	struct token *rhs_token = parser_expect(p, token_kind_number);
+	struct node *rhs = node_create(node_kind_number);
+	rhs->value = parse_number(rhs_token->string);
 
-	p->expr.lhs = parse_number(lhs->string);
-	p->expr.rhs = parse_number(rhs->string);
-	p->expr.op = op->kind;
+	struct node *expr = node_create(expr_node_kind);
+	node_add_child(expr, lhs);
+	node_add_child(expr, rhs);
+	node_add_child(p->root, expr);
 }
 
-static struct expr parse(char *s) {
+static struct node *parse(char *s) {
 	struct tokens tokens = lex(s);
 	struct parser p = {0};
 	p.token = tokens.ptr;
 	p.remaining_tokens = tokens.count;
+	p.root = node_create(node_kind_root);
 	parse_expr(&p);
-	return p.expr;
+	return p.root;
 }
 
-static void codegen(struct expr expr, FILE *file) {
+static void codegen(struct node *root, FILE *file) {
 	fprintf(file, ".global _main\n");
 	fprintf(file, "_main:\n");
 
-	fprintf(file, "\tmov x0, #%llu\n", expr.lhs);
-	fprintf(file, "\tmov x1, #%llu\n", expr.rhs);
+	for (struct node *child = root->children->next; child != root->children; child = child->next) {
+		struct node *lhs = child->children->next;
+		struct node *rhs = child->children->next->next;
+		fprintf(file, "\tmov x0, #%llu\n", lhs->value);
+		fprintf(file, "\tmov x1, #%llu\n", rhs->value);
 
-	switch (expr.op) {
-	case token_kind_plus:
-		fprintf(file, "\tadd x0, x0, x1\n");
-		break;
+		switch (child->kind) {
+		case node_kind_add:
+			fprintf(file, "\tadd x0, x0, x1\n");
+			break;
 
-	case token_kind_hyphen:
-		fprintf(file, "\tsub x0, x0, x1\n");
-		break;
+		case node_kind_sub:
+			fprintf(file, "\tsub x0, x0, x1\n");
+			break;
+		case node_kind_mul:
+			fprintf(file, "\tmul x0, x0, x1\n");
+			break;
 
-	case token_kind_asterisk:
-		fprintf(file, "\tmul x0, x0, x1\n");
-		break;
+		case node_kind_div:
+			fprintf(file, "\tsdiv x0, x0, x1\n");
+			break;
 
-	case token_kind_slash:
-		fprintf(file, "\tsdiv x0, x0, x1\n");
-		break;
+		default:
+			unreachable();
+		}
 
-	default:
-		unreachable();
+		fprintf(file, "\tret\n");
 	}
-
-	fprintf(file, "\tret\n");
 }
 
 int main(void) {
@@ -240,6 +299,6 @@ int main(void) {
 		buffer[n++] = c;
 	}
 
-	struct expr expr = parse(buffer);
-	codegen(expr, stdout);
+	struct node *root = parse(buffer);
+	codegen(root, stdout);
 }

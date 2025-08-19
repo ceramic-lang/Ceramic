@@ -19,7 +19,7 @@ expect_equal() {
 }
 
 cd "$(dirname "$(readlink -f "$0")")" || exit
-./build
+./build || exit
 
 expect_equal "1 + 1" "2"
 expect_equal "1 + 2" "3"
