@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#define countof(array) (sizeof(array) / sizeof((array)[0]))
+
 _Noreturn static void unreachable(void) {
 	__builtin_trap();
 }
@@ -15,10 +17,21 @@ static void assert(bool b) {
 enum token_kind {
 	token_kind_name = 1,
 	token_kind_number,
+
+	token_kind_proc,
+	token_kind_return,
+
 	token_kind_plus,
 	token_kind_hyphen,
 	token_kind_asterisk,
 	token_kind_slash,
+	token_kind_semi,
+
+	token_kind_lparen,
+	token_kind_rparen,
+	token_kind_lbrace,
+	token_kind_rbrace,
+
 	token_kind_eof,
 	token_kind__last,
 };
@@ -26,11 +39,32 @@ enum token_kind {
 static char *const token_kind_strings[] = {
         [token_kind_name] = "name",
         [token_kind_number] = "number",
+
+        [token_kind_proc] = "“proc”",
+        [token_kind_return] = "“return”",
+
         [token_kind_plus] = "“+”",
         [token_kind_hyphen] = "“-”",
         [token_kind_asterisk] = "“*”",
         [token_kind_slash] = "“/”",
+        [token_kind_semi] = "“;”",
+
+        [token_kind_lparen] = "“(”",
+        [token_kind_rparen] = "“)”",
+        [token_kind_lbrace] = "“{”",
+        [token_kind_rbrace] = "“}”",
+
         [token_kind_eof] = "end of file",
+};
+
+struct keyword {
+	char *string;
+	enum token_kind kind;
+};
+
+static const struct keyword keywords[] = {
+        {"proc", token_kind_proc},
+        {"return", token_kind_return},
 };
 
 struct token {
@@ -84,6 +118,11 @@ static struct tokens lex(char *s) {
 			        ['-'] = token_kind_hyphen,
 			        ['*'] = token_kind_asterisk,
 			        ['/'] = token_kind_slash,
+			        [';'] = token_kind_semi,
+			        ['('] = token_kind_lparen,
+			        [')'] = token_kind_rparen,
+			        ['{'] = token_kind_lbrace,
+			        ['}'] = token_kind_rbrace,
 			};
 
 			token.kind = single_char_kinds[(size_t)*s];
@@ -99,6 +138,16 @@ static struct tokens lex(char *s) {
 		char *token_string = calloc(len + 1, 1);
 		token.string = memcpy(token_string, start, len);
 		token.line = line;
+
+		if (token.kind == token_kind_name) {
+			for (size_t i = 0; i < countof(keywords); i++) {
+				struct keyword keyword = keywords[i];
+				if (strcmp(token.string, keyword.string) == 0) {
+					token.kind = keyword.kind;
+					break;
+				}
+			}
+		}
 
 		assert(count <= capacity);
 		if (count == capacity) {
@@ -117,6 +166,9 @@ static struct tokens lex(char *s) {
 enum node_kind {
 	node_kind_nil,
 	node_kind_root,
+	node_kind_proc,
+	node_kind_return,
+	node_kind_block,
 	node_kind_number,
 	node_kind_add,
 	node_kind_sub,
@@ -127,6 +179,9 @@ enum node_kind {
 static char *const node_kind_strings[] = {
         [node_kind_nil] = "nil",
         [node_kind_root] = "root",
+        [node_kind_proc] = "proc",
+        [node_kind_return] = "return",
+        [node_kind_block] = "block",
         [node_kind_number] = "number",
         [node_kind_add] = "add",
         [node_kind_sub] = "sub",
@@ -139,6 +194,7 @@ struct node {
 	struct node *prev;
 	struct node *children;
 	enum node_kind kind;
+	char *name;
 	uint64_t value;
 };
 
@@ -158,9 +214,24 @@ static void node_add_child(struct node *node, struct node *child) {
 	child->next->prev = child;
 }
 
+static struct node *node_find(struct node *node, enum node_kind kind) {
+	struct node *result = 0;
+	for (struct node *child = node->children->next; child != node->children; child = child->next) {
+		if (child->kind == kind) {
+			result = child;
+			break;
+		}
+	}
+	return result;
+}
+
 static void node_print_with_indentation(struct node *node, size_t indentation) {
-	for (size_t i = 0; i < indentation; i++) fprintf(stderr, "\t");
-	fprintf(stderr, "%s (%llu)\n", node_kind_strings[node->kind], node->value);
+	for (size_t i = 0; i < indentation; i++) fprintf(stderr, "  ");
+
+	fprintf(stderr, "%s", node_kind_strings[node->kind]);
+	if (node->name) fprintf(stderr, " (%s)", node->name);
+	fprintf(stderr, " (%llu)\n", node->value);
+
 	for (struct node *child = node->children->next; child != node->children; child = child->next) {
 		node_print_with_indentation(child, indentation + 1);
 	}
@@ -190,8 +261,12 @@ static enum token_kind parser_current(struct parser *p) {
 	return p->token->kind;
 }
 
+static bool parser_at(struct parser *p, enum token_kind kind) {
+	return parser_current(p) == kind;
+}
+
 static struct token *parser_bump(struct parser *p, enum token_kind kind) {
-	assert(parser_current(p) == kind);
+	assert(parser_at(p, kind));
 	struct token *token = p->token;
 	p->remaining_tokens--;
 	if (p->remaining_tokens == 0) {
@@ -207,7 +282,7 @@ static struct token *parser_bump(struct parser *p, enum token_kind kind) {
 
 static struct token *parser_expect(struct parser *p, enum token_kind kind) {
 	assert(kind != token_kind_eof);
-	if (parser_current(p) != kind) {
+	if (!parser_at(p, kind)) {
 		printf("%zu: expected %s, found %s\n", p->token->line, token_kind_strings[kind],
 		        token_kind_strings[parser_current(p)]);
 		exit(1);
@@ -215,7 +290,7 @@ static struct token *parser_expect(struct parser *p, enum token_kind kind) {
 	return parser_bump(p, kind);
 }
 
-static void parse_expr(struct parser *p) {
+static struct node *parse_expr(struct parser *p) {
 	struct token *lhs_token = parser_expect(p, token_kind_number);
 	struct node *lhs = node_create(node_kind_number);
 	lhs->value = parse_number(lhs_token->string);
@@ -241,7 +316,62 @@ static void parse_expr(struct parser *p) {
 	struct node *expr = node_create(expr_node_kind);
 	node_add_child(expr, lhs);
 	node_add_child(expr, rhs);
-	node_add_child(p->root, expr);
+	return expr;
+}
+
+static struct node *parse_stmt(struct parser *p) {
+	switch (parser_current(p)) {
+	case token_kind_return:
+		parser_bump(p, token_kind_return);
+		struct node *value = parse_expr(p);
+		struct node *stmt = node_create(node_kind_return);
+		node_add_child(stmt, value);
+		return stmt;
+
+	default:
+		printf("%zu: expected statement\n", p->token->line);
+		exit(1);
+	}
+}
+
+static struct node *parse_block(struct parser *p) {
+	parser_bump(p, token_kind_lbrace);
+	struct node *block = node_create(node_kind_block);
+	while (!parser_at(p, token_kind_rbrace)) {
+		struct node *stmt = parse_stmt(p);
+		node_add_child(block, stmt);
+	}
+	parser_expect(p, token_kind_rbrace);
+	return block;
+}
+
+static struct node *parse_proc(struct parser *p) {
+	parser_bump(p, token_kind_proc);
+	struct token *name_token = parser_expect(p, token_kind_name);
+	struct node *proc = node_create(node_kind_proc);
+	proc->name = name_token->string;
+
+	parser_expect(p, token_kind_lparen);
+	parser_expect(p, token_kind_rparen);
+	if (!parser_at(p, token_kind_lbrace)) {
+		printf("%zu: expected procedure body\n", p->token->line);
+		exit(1);
+	}
+	struct node *block = parse_block(p);
+	node_add_child(proc, block);
+
+	return proc;
+}
+
+static void parse_source_file(struct parser *p) {
+	while (!parser_at(p, token_kind_eof)) {
+		if (!parser_at(p, token_kind_proc)) {
+			printf("%zu: expected procedure\n", p->token->line);
+			exit(1);
+		}
+		struct node *proc = parse_proc(p);
+		node_add_child(p->root, proc);
+	}
 }
 
 static struct node *parse(char *s) {
@@ -250,41 +380,52 @@ static struct node *parse(char *s) {
 	p.token = tokens.ptr;
 	p.remaining_tokens = tokens.count;
 	p.root = node_create(node_kind_root);
-	parse_expr(&p);
+	parse_source_file(&p);
 	return p.root;
 }
 
 static void codegen(struct node *root, FILE *file) {
-	fprintf(file, ".global _main\n");
-	fprintf(file, "_main:\n");
+	assert(root->kind == node_kind_root);
 
-	for (struct node *child = root->children->next; child != root->children; child = child->next) {
-		struct node *lhs = child->children->next;
-		struct node *rhs = child->children->next->next;
-		fprintf(file, "\tmov x0, #%llu\n", lhs->value);
-		fprintf(file, "\tmov x1, #%llu\n", rhs->value);
+	for (struct node *proc = root->children->next; proc != root->children; proc = proc->next) {
+		assert(proc->kind == node_kind_proc);
+		fprintf(file, ".global _%s\n", proc->name);
+		fprintf(file, "_%s:\n", proc->name);
 
-		switch (child->kind) {
-		case node_kind_add:
-			fprintf(file, "\tadd x0, x0, x1\n");
-			break;
+		struct node *block = node_find(proc, node_kind_block);
+		assert(block);
 
-		case node_kind_sub:
-			fprintf(file, "\tsub x0, x0, x1\n");
-			break;
-		case node_kind_mul:
-			fprintf(file, "\tmul x0, x0, x1\n");
-			break;
+		for (struct node *stmt = block->children->next; stmt != block->children; stmt = stmt->next) {
+			assert(stmt->kind == node_kind_return);
+			struct node *value = stmt->children->next;
+			struct node *lhs = value->children->next;
+			struct node *rhs = value->children->next->next;
+			fprintf(file, "\tmov x0, #%llu\n", lhs->value);
+			fprintf(file, "\tmov x1, #%llu\n", rhs->value);
 
-		case node_kind_div:
-			fprintf(file, "\tsdiv x0, x0, x1\n");
-			break;
+			switch (value->kind) {
+			case node_kind_add:
+				fprintf(file, "\tadd x0, x0, x1\n");
+				break;
 
-		default:
-			unreachable();
+			case node_kind_sub:
+				fprintf(file, "\tsub x0, x0, x1\n");
+				break;
+
+			case node_kind_mul:
+				fprintf(file, "\tmul x0, x0, x1\n");
+				break;
+
+			case node_kind_div:
+				fprintf(file, "\tsdiv x0, x0, x1\n");
+				break;
+
+			default:
+				unreachable();
+			}
+
+			fprintf(file, "\tret\n");
 		}
-
-		fprintf(file, "\tret\n");
 	}
 }
 

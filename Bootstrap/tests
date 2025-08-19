@@ -21,10 +21,10 @@ expect_equal() {
 cd "$(dirname "$(readlink -f "$0")")" || exit
 ./build || exit
 
-expect_equal "1 + 1" "2"
-expect_equal "1 + 2" "3"
-expect_equal "10 - 2" "8"
-expect_equal "4 * 3" "12"
-expect_equal "7 / 2" "3"
+expect_equal "proc main() { return 1 + 1 }" "2"
+expect_equal "proc main() { return 1 + 2 }" "3"
+expect_equal "proc main() { return 10 - 2 }" "8"
+expect_equal "proc main() { return 4 * 3 }" "12"
+expect_equal "proc main() { return 7 / 2 }" "3"
 
 rm "$asm_path" "$executable_path"
