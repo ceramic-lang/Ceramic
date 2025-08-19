@@ -1,22 +1,30 @@
 #!/bin/sh
 
+asm_path="./fixture.s"
+executable_path="./fixture"
+
 expect_equal() {
 	source_code="$1"
 	expected_status="$2"
-	printf "%s" "$source_code" | MallocNanoZone=0 ./ceramic
+	printf "%s" "$source_code" | MallocNanoZone=0 ./ceramic > "$asm_path"
+	clang -o "$executable_path" "$asm_path"
+	"$executable_path"
 	actual_status="$?"
 	if [ "$expected_status" = "$actual_status" ]; then
 		printf "PASS: %s\n" "$source_code"
 	else
-		printf "FAIL: %s\n" "$source_code"
-		exit 1
+		printf "FAIL: %s: expected %s, got %s\n" \
+			"$source_code" "$expected_status" "$actual_status"
 	fi
 }
 
 cd "$(dirname "$(readlink -f "$0")")" || exit
 ./build
+
 expect_equal "1 + 1" "2"
 expect_equal "1 + 2" "3"
 expect_equal "10 - 2" "8"
 expect_equal "4 * 3" "12"
 expect_equal "7 / 2" "3"
+
+rm "$asm_path" "$executable_path"

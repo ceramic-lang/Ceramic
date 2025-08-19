@@ -198,19 +198,35 @@ static struct expr parse(char *s) {
 	return p.expr;
 }
 
-static uint64_t eval(struct expr expr) {
+static void codegen(struct expr expr, FILE *file) {
+	fprintf(file, ".global _main\n");
+	fprintf(file, "_main:\n");
+
+	fprintf(file, "\tmov x0, #%llu\n", expr.lhs);
+	fprintf(file, "\tmov x1, #%llu\n", expr.rhs);
+
 	switch (expr.op) {
 	case token_kind_plus:
-		return expr.lhs + expr.rhs;
+		fprintf(file, "\tadd x0, x0, x1\n");
+		break;
+
 	case token_kind_hyphen:
-		return expr.lhs - expr.rhs;
+		fprintf(file, "\tsub x0, x0, x1\n");
+		break;
+
 	case token_kind_asterisk:
-		return expr.lhs * expr.rhs;
+		fprintf(file, "\tmul x0, x0, x1\n");
+		break;
+
 	case token_kind_slash:
-		return expr.lhs / expr.rhs;
+		fprintf(file, "\tsdiv x0, x0, x1\n");
+		break;
+
 	default:
 		unreachable();
 	}
+
+	fprintf(file, "\tret\n");
 }
 
 int main(void) {
@@ -225,5 +241,5 @@ int main(void) {
 	}
 
 	struct expr expr = parse(buffer);
-	return (int)eval(expr);
+	codegen(expr, stdout);
 }
