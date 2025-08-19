@@ -8,7 +8,6 @@ AllowShortLoopsOnASingleLine: true
 BinPackParameters: false
 ColumnLimit: 120
 ContinuationIndentWidth: 8
-IndentCaseLabels: true
 IndentWidth: 8
 InsertNewlineAtEOF: true
 SortIncludes: Never

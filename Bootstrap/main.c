@@ -13,10 +13,12 @@ static void assert(bool b) {
 }
 
 enum token_kind {
-	token_kind_name,
+	token_kind_name = 1,
 	token_kind_number,
 	token_kind_plus,
 	token_kind_hyphen,
+	token_kind_asterisk,
+	token_kind_slash,
 	token_kind_eof,
 };
 
@@ -25,6 +27,8 @@ static char *const token_kind_strings[] = {
         [token_kind_number] = "number",
         [token_kind_plus] = "“+”",
         [token_kind_hyphen] = "“-”",
+        [token_kind_asterisk] = "“*”",
+        [token_kind_slash] = "“/”",
         [token_kind_eof] = "end of file",
 };
 
@@ -74,18 +78,19 @@ static struct tokens lex(char *s) {
 				s++;
 			} while (is_digit(*s));
 		} else {
-			switch (*s) {
-				case '+':
-					token.kind = token_kind_plus;
-					break;
-				case '-':
-					token.kind = token_kind_hyphen;
-					break;
-				default:
-					printf("%zu: invalid token “%c”\n", line, *s);
-					exit(1);
-					break;
+			static const enum token_kind single_char_kinds[256] = {
+			        ['+'] = token_kind_plus,
+			        ['-'] = token_kind_hyphen,
+			        ['*'] = token_kind_asterisk,
+			        ['/'] = token_kind_slash,
+			};
+
+			token.kind = single_char_kinds[(size_t)*s];
+			if (token.kind == 0) {
+				printf("%zu: invalid token “%c”\n", line, *s);
+				exit(1);
 			}
+
 			s++;
 		}
 
@@ -164,15 +169,17 @@ static void parse_expr(struct parser *p) {
 
 	struct token *op = 0;
 	switch (parser_current(p)) {
-		case token_kind_plus:
-		case token_kind_hyphen:
-			op = parser_bump(p, parser_current(p));
-			break;
+	case token_kind_plus:
+	case token_kind_hyphen:
+	case token_kind_asterisk:
+	case token_kind_slash:
+		op = parser_bump(p, parser_current(p));
+		break;
 
-		default:
-			printf("%zu: expected operator\n", p->token->line);
-			exit(1);
-			break;
+	default:
+		printf("%zu: expected operator\n", p->token->line);
+		exit(1);
+		break;
 	}
 
 	struct token *rhs = parser_expect(p, token_kind_number);
@@ -193,12 +200,16 @@ static struct expr parse(char *s) {
 
 static uint64_t eval(struct expr expr) {
 	switch (expr.op) {
-		case token_kind_plus:
-			return expr.lhs + expr.rhs;
-		case token_kind_hyphen:
-			return expr.lhs - expr.rhs;
-		default:
-			unreachable();
+	case token_kind_plus:
+		return expr.lhs + expr.rhs;
+	case token_kind_hyphen:
+		return expr.lhs - expr.rhs;
+	case token_kind_asterisk:
+		return expr.lhs * expr.rhs;
+	case token_kind_slash:
+		return expr.lhs / expr.rhs;
+	default:
+		unreachable();
 	}
 }
 
