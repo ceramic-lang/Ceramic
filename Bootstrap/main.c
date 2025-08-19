@@ -225,5 +225,5 @@ int main(void) {
 	}
 
 	struct expr expr = parse(buffer);
-	printf("%llu\n", eval(expr));
+	return (int)eval(expr);
 }
