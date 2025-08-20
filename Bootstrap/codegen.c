@@ -1,3 +1,5 @@
+static void codegen_expr_address(struct node *expr, FILE *file);
+
 static void codegen_expr(struct node *expr, FILE *file) {
 	switch (expr->kind) {
 	case node_kind_name:
@@ -6,6 +8,15 @@ static void codegen_expr(struct node *expr, FILE *file) {
 
 	case node_kind_number:
 		fprintf(file, "\tmov x9, #%llu\n", expr->value);
+		break;
+
+	case node_kind_address:
+		codegen_expr_address(expr->kids->next, file);
+		break;
+
+	case node_kind_deref:
+		codegen_expr(expr->kids->next, file);
+		fprintf(file, "\tldr x9, [x9]\n");
 		break;
 
 	case node_kind_add:
@@ -42,7 +53,11 @@ static void codegen_expr(struct node *expr, FILE *file) {
 static void codegen_expr_address(struct node *expr, FILE *file) {
 	switch (expr->kind) {
 	case node_kind_name:
-		fprintf(file, "\tadd x9, x29, #-%zu\n", expr->local->offset);
+		fprintf(file, "\tsub x9, x29, #%zu\n", expr->local->offset);
+		break;
+
+	case node_kind_deref:
+		codegen_expr(expr->kids->next, file);
 		break;
 
 	default:

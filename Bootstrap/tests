@@ -77,6 +77,13 @@ proc main() int {
 	a = b
 	return a
 }" "11"
+expect_equal "
+proc main() int {
+	n: int = 1
+	np: *int = *n
+	np^ = 9
+	return n + np^
+}" "18"
 
 expect_error "proc main() int { return 0 }" "1: expected “;”, found “}”"
 expect_error "\`" "1: invalid token “\`”"

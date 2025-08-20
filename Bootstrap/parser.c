@@ -9,6 +9,7 @@ enum token_kind {
 	token_kind_hyphen,
 	token_kind_asterisk,
 	token_kind_slash,
+	token_kind_caret,
 	token_kind_equal,
 	token_kind_colon,
 	token_kind_semi,
@@ -33,6 +34,7 @@ static char *const token_kind_strings[] = {
         [token_kind_hyphen] = "“-”",
         [token_kind_asterisk] = "“*”",
         [token_kind_slash] = "“/”",
+        [token_kind_caret] = "“^”",
         [token_kind_equal] = "“=”",
         [token_kind_colon] = "“:”",
         [token_kind_semi] = "“;”",
@@ -94,13 +96,13 @@ static struct tokens lex(char *s) {
 		if (*s == ' ' || *s == '\t' || *s == '\n') {
 			if (*s == '\n') {
 				if (tokens.count > 0) {
-					struct token latoken = tokens.ptr[tokens.count - 1];
+					struct token last_token = tokens.ptr[tokens.count - 1];
 
-					static const uint64_t laexpression_token_kinds = (1 << token_kind_name) |
-					                                                 (1 << token_kind_number) |
-					                                                 (1 << token_kind_rparen);
-					if (laexpression_token_kinds & (1 << latoken.kind)) {
-						struct token auto_semi_token = latoken;
+					static const uint64_t last_expression_token_kinds =
+					        (1 << token_kind_name) | (1 << token_kind_number) |
+					        (1 << token_kind_rparen) | (1 << token_kind_caret);
+					if (last_expression_token_kinds & (1 << last_token.kind)) {
+						struct token auto_semi_token = last_token;
 						auto_semi_token.kind = token_kind_semi;
 						auto_semi_token.string = ";";
 						*tokens_push(&tokens) = auto_semi_token;
@@ -133,6 +135,7 @@ static struct tokens lex(char *s) {
 			        ['-'] = token_kind_hyphen,
 			        ['*'] = token_kind_asterisk,
 			        ['/'] = token_kind_slash,
+			        ['^'] = token_kind_caret,
 			        ['='] = token_kind_equal,
 			        [':'] = token_kind_colon,
 			        [';'] = token_kind_semi,
@@ -273,32 +276,51 @@ static struct token *parser_expect(struct parser *p, enum token_kind kind) {
 static struct node *parse_expr(struct parser *p);
 
 static struct node *parse_lhs(struct parser *p) {
+	struct node *result = 0;
+
 	switch (parser_current(p)) {
 	case token_kind_number: {
 		struct token *token = parser_bump(p, token_kind_number);
-		struct node *number = node_create(node_kind_number, token);
-		number->value = parse_number(token->string);
-		return number;
+		result = node_create(node_kind_number, token);
+		result->value = parse_number(token->string);
+		break;
 	}
 
 	case token_kind_name: {
 		struct token *token = parser_bump(p, token_kind_name);
-		struct node *name = node_create(node_kind_name, token);
-		name->name = token->string;
-		return name;
+		result = node_create(node_kind_name, token);
+		result->name = token->string;
+		break;
+	}
+
+	case token_kind_asterisk: {
+		struct token *token = parser_bump(p, token_kind_asterisk);
+		struct node *pointee = parse_lhs(p);
+		result = node_create(node_kind_address, token);
+		node_add_kid(result, pointee);
+		break;
 	}
 
 	case token_kind_lparen: {
 		parser_bump(p, token_kind_lparen);
-		struct node *expr = parse_expr(p);
+		result = parse_expr(p);
 		parser_expect(p, token_kind_rparen);
-		return expr;
+		break;
 	}
 
 	default:
 		printf("%zu: expected expression\n", p->token->line);
 		exit(1);
 	}
+
+	if (parser_at(p, token_kind_caret)) {
+		struct token *token = parser_bump(p, token_kind_caret);
+		struct node *deref = node_create(node_kind_deref, token);
+		node_add_kid(deref, result);
+		result = deref;
+	}
+
+	return result;
 }
 
 static bool right_binds_tighter(enum node_kind left, enum node_kind right) {
