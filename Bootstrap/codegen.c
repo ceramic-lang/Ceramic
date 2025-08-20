@@ -1,5 +1,9 @@
 static void codegen_expr(struct node *expr, FILE *file) {
 	switch (expr->kind) {
+	case node_kind_name:
+		fprintf(file, "\tldr x9, [x29, #-%zu]\n", expr->local->offset);
+		break;
+
 	case node_kind_number:
 		fprintf(file, "\tmov x9, #%llu\n", expr->value);
 		break;
@@ -35,23 +39,37 @@ static void codegen_expr(struct node *expr, FILE *file) {
 	}
 }
 
-static void codegen_stmt(struct node *stmt, FILE *file) {
+static void codegen_stmt(struct node *proc, struct node *stmt, FILE *file) {
 	switch (stmt->kind) {
+	case node_kind_local:
+		codegen_expr(node_find(stmt, node_kind_initializer)->kids->next, file);
+		fprintf(file, "\tstr x9, [x29, #-%zu]\n", stmt->local->offset);
+		break;
+
 	case node_kind_return:
 		codegen_expr(stmt->kids->next, file);
 		fprintf(file, "\tmov x0, x9\n");
-		fprintf(file, "\tret\n");
+		fprintf(file, "\tb .L.%s.return\n", proc->name);
 		break;
 
 	case node_kind_block:
 		for (struct node *kid = stmt->kids->next; kid != stmt->kids; kid = kid->next) {
-			codegen_stmt(kid, file);
+			codegen_stmt(proc, kid, file);
 		}
 		break;
 
 	default:
 		unreachable();
 	}
+}
+
+static size_t round_up(size_t n, size_t m) {
+	size_t remainder = n % m;
+	if (remainder == 0) return n;
+	size_t result = n + m - remainder;
+	assert(result % m == 0);
+	assert(result > n);
+	return result;
 }
 
 static void codegen(struct node *root, FILE *file) {
@@ -62,6 +80,18 @@ static void codegen(struct node *root, FILE *file) {
 		fprintf(file, ".global _%s\n", proc->name);
 		fprintf(file, ".align 2\n");
 		fprintf(file, "_%s:\n", proc->name);
-		codegen_stmt(node_find(proc, node_kind_block), file);
+
+		size_t locals_size = round_up(proc->locals_size, 16);
+		fprintf(file, "\tstp x29, x30, [sp, #-16]!\n");
+		fprintf(file, "\tmov x29, sp\n");
+		fprintf(file, "\tsub sp, sp, #%zu\n", locals_size);
+
+		struct node *body = node_find(proc, node_kind_block);
+		codegen_stmt(proc, body, file);
+
+		fprintf(file, ".L.%s.return:\n", proc->name);
+		fprintf(file, "\tadd sp, sp, #%zu\n", locals_size);
+		fprintf(file, "\tldp x29, x30, [sp], #16\n");
+		fprintf(file, "\tret\n");
 	}
 }

@@ -16,6 +16,7 @@ static void assert(bool b) {
 
 #include "ceramic.h"
 #include "parser.c"
+#include "type.c"
 #include "codegen.c"
 
 int main(void) {
@@ -30,5 +31,6 @@ int main(void) {
 	}
 
 	struct node *root = parse(buffer);
+	typecheck(root);
 	codegen(root, stdout);
 }

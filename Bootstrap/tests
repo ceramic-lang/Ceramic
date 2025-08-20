@@ -42,5 +42,12 @@ proc main() int {
 	{{ return 4; return 7; }}
 	{ return 2; }
 }" "4"
+expect_equal "proc main() int { i: int = 6; return i; }" "6"
+expect_equal "
+proc main() int {
+	x: int = 10
+	y: int = 25
+	return y - x
+}" "15"
 
 rm "$asm_path" "$executable_path"
