@@ -21,23 +21,23 @@ expect_equal() {
 cd "$(dirname "$(readlink -f "$0")")" || exit
 ./build || exit
 
-expect_equal "proc main() { return 1 + 1; }" "2"
+expect_equal "proc main() int { return 1 + 1; }" "2"
 expect_equal "
-proc main() {
+proc main() int {
 	return 1 + 1
 }" "2"
-expect_equal "proc main() { return 1 + 2; }" "3"
-expect_equal "proc main() { return 10 - 2; }" "8"
-expect_equal "proc main() { return 4 * 3; }" "12"
-expect_equal "proc main() { return 7 / 2; }" "3"
-expect_equal "proc main() { return 1 + 2 + 3; }" "6"
-expect_equal "proc main() { return 1 + 2 * 3; }" "7"
-expect_equal "proc main() { return 10 - 5 - 3; }" "2"
-expect_equal "proc main() { return 10 - (5 - 3); }" "8"
-expect_equal "proc main() { return ((10) - ((5 - 3))); }" "8"
-expect_equal "proc main() { return 10; return 20; }" "10"
+expect_equal "proc main() int { return 1 + 2; }" "3"
+expect_equal "proc main() int { return 10 - 2; }" "8"
+expect_equal "proc main() int { return 4 * 3; }" "12"
+expect_equal "proc main() int { return 7 / 2; }" "3"
+expect_equal "proc main() int { return 1 + 2 + 3; }" "6"
+expect_equal "proc main() int { return 1 + 2 * 3; }" "7"
+expect_equal "proc main() int { return 10 - 5 - 3; }" "2"
+expect_equal "proc main() int { return 10 - (5 - 3); }" "8"
+expect_equal "proc main() int { return ((10) - ((5 - 3))); }" "8"
+expect_equal "proc main() int { return 10; return 20; }" "10"
 expect_equal "
-proc main() {
+proc main() int {
 	{}
 	{{ return 4; return 7; }}
 	{ return 2; }

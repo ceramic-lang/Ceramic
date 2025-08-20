@@ -188,6 +188,7 @@ enum node_kind {
 	node_kind_proc,
 	node_kind_return,
 	node_kind_block,
+	node_kind_name,
 	node_kind_number,
 	node_kind_add,
 	node_kind_sub,
@@ -202,6 +203,7 @@ static char *const node_kind_strings[] = {
         [node_kind_proc] = "proc",
         [node_kind_return] = "return",
         [node_kind_block] = "block",
+        [node_kind_name] = "name",
         [node_kind_number] = "number",
         [node_kind_add] = "add",
         [node_kind_sub] = "sub",
@@ -315,10 +317,17 @@ static struct node *parse_expr(struct parser *p);
 static struct node *parse_lhs(struct parser *p) {
 	switch (parser_current(p)) {
 	case token_kind_number: {
-		struct token *lhs_token = parser_bump(p, token_kind_number);
-		struct node *lhs = node_create(node_kind_number);
-		lhs->value = parse_number(lhs_token->string);
-		return lhs;
+		struct token *number_token = parser_bump(p, token_kind_number);
+		struct node *number = node_create(node_kind_number);
+		number->value = parse_number(number_token->string);
+		return number;
+	}
+
+	case token_kind_name: {
+		struct token *name_token = parser_bump(p, token_kind_name);
+		struct node *name = node_create(node_kind_name);
+		name->name = name_token->string;
+		return name;
 	}
 
 	case token_kind_lparen: {
@@ -413,6 +422,12 @@ static struct node *parse_proc(struct parser *p) {
 
 	parser_expect(p, token_kind_lparen);
 	parser_expect(p, token_kind_rparen);
+
+	if (!parser_at(p, token_kind_lbrace)) {
+		struct node *return_type = parse_expr(p);
+		node_add_child(proc, return_type);
+	}
+
 	if (!parser_at(p, token_kind_lbrace)) {
 		printf("%zu: expected procedure body\n", p->token->line);
 		exit(1);
