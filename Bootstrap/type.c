@@ -117,6 +117,13 @@ static struct type *check_node(struct node *proc, struct node *node) {
 		return 0;
 	}
 
+	case node_kind_return: {
+		struct node *return_value = node->kids->next;
+		struct type *return_value_type = check_node(proc, return_value);
+		expect_types_equal(proc->return_type, return_value_type, return_value->line);
+		return 0;
+	}
+
 	case node_kind_address: {
 		struct type *pointee = check_node(proc, node->kids->next);
 		return type_pointer(pointee);
@@ -153,6 +160,7 @@ static struct type *check_node(struct node *proc, struct node *node) {
 static void typecheck(struct node *root) {
 	for (struct node *proc = root->kids->next; proc != root->kids; proc = proc->next) {
 		assert(proc->kind == node_kind_proc);
+		proc->return_type = type_from_expr(node_find(proc, node_kind_type)->kids->next);
 		struct node *body = node_find(proc, node_kind_block);
 		check_node(proc, body);
 	}

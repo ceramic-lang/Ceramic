@@ -436,7 +436,10 @@ static struct node *parse_proc(struct parser *p) {
 	parser_expect(p, token_kind_rparen);
 
 	if (!parser_at(p, token_kind_lbrace)) {
-		struct node *return_type = parse_expr(p);
+		struct token *first_return_type_token = p->token;
+		struct node *return_type_expr = parse_expr(p);
+		struct node *return_type = node_create(node_kind_type, first_return_type_token);
+		node_add_kid(return_type, return_type_expr);
 		node_add_kid(proc, return_type);
 	}
 

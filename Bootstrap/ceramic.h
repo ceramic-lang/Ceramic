@@ -68,6 +68,7 @@ struct node {
 
 	struct local *local;
 	size_t locals_size;
+	struct type *return_type;
 };
 
 __attribute__((unused)) static void node_print(struct node *node);
