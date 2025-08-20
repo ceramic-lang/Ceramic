@@ -76,7 +76,19 @@ struct token {
 struct tokens {
 	struct token *ptr;
 	size_t count;
+	size_t capacity;
 };
+
+static struct token *tokens_push(struct tokens *tokens) {
+	assert(tokens->count <= tokens->capacity);
+	if (tokens->count == tokens->capacity) {
+		tokens->capacity = tokens->capacity == 0 ? 8 : 2 * tokens->capacity;
+		tokens->ptr = realloc(tokens->ptr, sizeof(struct token) * tokens->capacity);
+	}
+	struct token *token = tokens->ptr + tokens->count;
+	tokens->count++;
+	return token;
+}
 
 static bool is_alpha(char c) {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -87,14 +99,29 @@ static bool is_digit(char c) {
 }
 
 static struct tokens lex(char *s) {
-	size_t count = 0;
-	size_t capacity = 8;
-	struct token *tokens = malloc(sizeof(struct token) * capacity);
+	struct tokens tokens = {0};
 	size_t line = 1;
 
 	while (*s) {
 		if (*s == ' ' || *s == '\t' || *s == '\n') {
-			if (*s == '\n') line++;
+			if (*s == '\n') {
+				if (tokens.count > 0) {
+					struct token last_token = tokens.ptr[tokens.count - 1];
+
+					static const uint64_t last_expression_token_kinds = (1 << token_kind_name) |
+					                                                    (1 << token_kind_number) |
+					                                                    (1 << token_kind_rparen);
+					if (last_expression_token_kinds & (1 << last_token.kind)) {
+						struct token auto_semi_token = last_token;
+						auto_semi_token.kind = token_kind_semi;
+						auto_semi_token.string = ";";
+						*tokens_push(&tokens) = auto_semi_token;
+					}
+				}
+
+				line++;
+			}
+
 			s++;
 			continue;
 		}
@@ -149,18 +176,10 @@ static struct tokens lex(char *s) {
 			}
 		}
 
-		assert(count <= capacity);
-		if (count == capacity) {
-			capacity *= 2;
-			tokens = realloc(tokens, sizeof(struct token) * capacity);
-		}
-		tokens[count++] = token;
+		*tokens_push(&tokens) = token;
 	}
 
-	struct tokens result = {0};
-	result.ptr = tokens;
-	result.count = count;
-	return result;
+	return tokens;
 }
 
 enum node_kind {
@@ -359,6 +378,7 @@ static struct node *parse_stmt(struct parser *p) {
 	case token_kind_return:
 		parser_bump(p, token_kind_return);
 		struct node *value = parse_expr(p);
+		parser_expect(p, token_kind_semi);
 		struct node *stmt = node_create(node_kind_return);
 		node_add_child(stmt, value);
 		return stmt;
