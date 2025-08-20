@@ -90,13 +90,13 @@ static struct tokens lex(char *s) {
 		if (*s == ' ' || *s == '\t' || *s == '\n') {
 			if (*s == '\n') {
 				if (tokens.count > 0) {
-					struct token last_token = tokens.ptr[tokens.count - 1];
+					struct token latoken = tokens.ptr[tokens.count - 1];
 
-					static const uint64_t last_expression_token_kinds = (1 << token_kind_name) |
-					                                                    (1 << token_kind_number) |
-					                                                    (1 << token_kind_rparen);
-					if (last_expression_token_kinds & (1 << last_token.kind)) {
-						struct token auto_semi_token = last_token;
+					static const uint64_t laexpression_token_kinds = (1 << token_kind_name) |
+					                                                 (1 << token_kind_number) |
+					                                                 (1 << token_kind_rparen);
+					if (laexpression_token_kinds & (1 << latoken.kind)) {
+						struct token auto_semi_token = latoken;
 						auto_semi_token.kind = token_kind_semi;
 						auto_semi_token.string = ";";
 						*tokens_push(&tokens) = auto_semi_token;
@@ -169,24 +169,24 @@ static struct tokens lex(char *s) {
 static struct node *node_create(enum node_kind kind) {
 	struct node *node = calloc(1, sizeof(struct node));
 	node->kind = kind;
-	node->children = calloc(1, sizeof(struct node));
-	node->children->next = node->children;
-	node->children->prev = node->children;
+	node->kids = calloc(1, sizeof(struct node));
+	node->kids->next = node->kids;
+	node->kids->prev = node->kids;
 	return node;
 }
 
-static void node_add_child(struct node *node, struct node *child) {
-	child->prev = node->children->prev;
-	child->next = node->children;
-	child->prev->next = child;
-	child->next->prev = child;
+static void node_add_kid(struct node *node, struct node *kid) {
+	kid->prev = node->kids->prev;
+	kid->next = node->kids;
+	kid->prev->next = kid;
+	kid->next->prev = kid;
 }
 
 static struct node *node_find(struct node *node, enum node_kind kind) {
 	struct node *result = 0;
-	for (struct node *child = node->children->next; child != node->children; child = child->next) {
-		if (child->kind == kind) {
-			result = child;
+	for (struct node *kid = node->kids->next; kid != node->kids; kid = kid->next) {
+		if (kid->kind == kind) {
+			result = kid;
 			break;
 		}
 	}
@@ -200,8 +200,8 @@ static void node_print_with_indentation(struct node *node, size_t indentation) {
 	if (node->name) fprintf(stderr, " (%s)", node->name);
 	fprintf(stderr, " (%llu)\n", node->value);
 
-	for (struct node *child = node->children->next; child != node->children; child = child->next) {
-		node_print_with_indentation(child, indentation + 1);
+	for (struct node *kid = node->kids->next; kid != node->kids; kid = kid->next) {
+		node_print_with_indentation(kid, indentation + 1);
 	}
 }
 
@@ -316,8 +316,8 @@ static struct node *parse_expr_rec(struct parser *p, enum node_kind left_node_ki
 		struct node *rhs = parse_expr_rec(p, right_node_kind);
 
 		struct node *new_lhs = node_create(right_node_kind);
-		node_add_child(new_lhs, lhs);
-		node_add_child(new_lhs, rhs);
+		node_add_kid(new_lhs, lhs);
+		node_add_kid(new_lhs, rhs);
 		lhs = new_lhs;
 	}
 
@@ -335,7 +335,7 @@ static struct node *parse_block(struct parser *p) {
 	struct node *block = node_create(node_kind_block);
 	while (!parser_at(p, token_kind_rbrace)) {
 		struct node *stmt = parse_stmt(p);
-		node_add_child(block, stmt);
+		node_add_kid(block, stmt);
 	}
 	parser_expect(p, token_kind_rbrace);
 	return block;
@@ -348,7 +348,7 @@ static struct node *parse_stmt(struct parser *p) {
 		struct node *value = parse_expr(p);
 		parser_expect(p, token_kind_semi);
 		struct node *stmt = node_create(node_kind_return);
-		node_add_child(stmt, value);
+		node_add_kid(stmt, value);
 		return stmt;
 
 	case token_kind_lbrace:
@@ -371,7 +371,7 @@ static struct node *parse_proc(struct parser *p) {
 
 	if (!parser_at(p, token_kind_lbrace)) {
 		struct node *return_type = parse_expr(p);
-		node_add_child(proc, return_type);
+		node_add_kid(proc, return_type);
 	}
 
 	if (!parser_at(p, token_kind_lbrace)) {
@@ -379,7 +379,7 @@ static struct node *parse_proc(struct parser *p) {
 		exit(1);
 	}
 	struct node *block = parse_block(p);
-	node_add_child(proc, block);
+	node_add_kid(proc, block);
 
 	return proc;
 }
@@ -391,7 +391,7 @@ static void parse_source_file(struct parser *p) {
 			exit(1);
 		}
 		struct node *proc = parse_proc(p);
-		node_add_child(p->root, proc);
+		node_add_kid(p->root, proc);
 	}
 }
 

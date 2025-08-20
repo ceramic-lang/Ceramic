@@ -30,7 +30,7 @@ static char *const node_kind_strings[] = {
 struct node {
 	struct node *next;
 	struct node *prev;
-	struct node *children;
+	struct node *kids;
 	enum node_kind kind;
 	char *name;
 	uint64_t value;

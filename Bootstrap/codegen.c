@@ -8,9 +8,9 @@ static void codegen_expr(struct node *expr, FILE *file) {
 	case node_kind_sub:
 	case node_kind_mul:
 	case node_kind_div:
-		codegen_expr(expr->children->next, file);
+		codegen_expr(expr->kids->next, file);
 		fprintf(file, "\tstr x9, [sp, #-16]!\n");
-		codegen_expr(expr->children->next->next, file);
+		codegen_expr(expr->kids->next->next, file);
 		fprintf(file, "\tldr x10, [sp], #16\n");
 		switch (expr->kind) {
 		case node_kind_add:
@@ -38,14 +38,14 @@ static void codegen_expr(struct node *expr, FILE *file) {
 static void codegen_stmt(struct node *stmt, FILE *file) {
 	switch (stmt->kind) {
 	case node_kind_return:
-		codegen_expr(stmt->children->next, file);
+		codegen_expr(stmt->kids->next, file);
 		fprintf(file, "\tmov x0, x9\n");
 		fprintf(file, "\tret\n");
 		break;
 
 	case node_kind_block:
-		for (struct node *child = stmt->children->next; child != stmt->children; child = child->next) {
-			codegen_stmt(child, file);
+		for (struct node *kid = stmt->kids->next; kid != stmt->kids; kid = kid->next) {
+			codegen_stmt(kid, file);
 		}
 		break;
 
@@ -57,7 +57,7 @@ static void codegen_stmt(struct node *stmt, FILE *file) {
 static void codegen(struct node *root, FILE *file) {
 	assert(root->kind == node_kind_root);
 
-	for (struct node *proc = root->children->next; proc != root->children; proc = proc->next) {
+	for (struct node *proc = root->kids->next; proc != root->kids; proc = proc->next) {
 		assert(proc->kind == node_kind_proc);
 		fprintf(file, ".global _%s\n", proc->name);
 		fprintf(file, ".align 2\n");
