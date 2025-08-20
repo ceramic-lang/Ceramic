@@ -7,7 +7,7 @@ executable_path="./fixture"
 expect_equal() {
 	source_code="$1"
 	expected_status="$2"
-	printf "%s" "$source_code" | MallocNanoZone=0 ./ceramic > "$asm_path"
+	printf "%s" "$source_code" | MallocNanoZone=0 ./ceramic "$asm_path"
 	clang -o "$executable_path" "$asm_path"
 	"$executable_path"
 	actual_status="$?"
@@ -22,7 +22,7 @@ expect_equal() {
 expect_error() {
 	source_code="$1"
 	expected_error="$2"
-	actual_error=$(printf "%s" "$source_code" | MallocNanoZone=0 ./ceramic)
+	actual_error=$(printf "%s" "$source_code" | MallocNanoZone=0 ./ceramic /dev/null)
 	if [ "$expected_error" != "$actual_error" ]; then
 		printf "FAIL: %s: expected <%s>, got <%s>\n" \
 			"$source_code" "$expected_error" "$actual_error"
@@ -62,16 +62,32 @@ proc main() int {
 	y: int = 25
 	return y - x
 }" "15"
+expect_equal "
+proc main() int {
+	x: int = 4
+	x = 3
+	y: int = 1
+	y = 2
+	return x
+}" "3"
+expect_equal "
+proc main() int {
+	a: int = 10
+	b: int = 11
+	a = b
+	return a
+}" "11"
 
 expect_error "proc main() int { return 0 }" "1: expected “;”, found “}”"
 expect_error "\`" "1: invalid token “\`”"
 expect_error "proc main() int { return : }" "1: expected expression"
-expect_error "proc main() int { : }" "1: expected statement"
+expect_error "proc main() int { : }" "1: expected expression"
 expect_error "proc main() int :" "1: expected procedure body"
 expect_error ":" "1: expected procedure"
 expect_error "
 proc main() int {
 	return foo
 }" "3: unknown variable “foo”"
+expect_error "proc main() int { 1 = 2; }" "1: expression doesn’t have an address"
 
 rm "$asm_path" "$executable_path"

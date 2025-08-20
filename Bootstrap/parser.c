@@ -367,7 +367,7 @@ static struct node *parse_stmt(struct parser *p) {
 	case token_kind_lbrace:
 		return parse_block(p);
 
-	default:
+	default: {
 		if (parser_at(p, token_kind_name) && parser_peek(p) == token_kind_colon) {
 			struct token *name = parser_bump(p, token_kind_name);
 			struct token *colon = parser_bump(p, token_kind_colon);
@@ -388,8 +388,16 @@ static struct node *parse_stmt(struct parser *p) {
 			return local;
 		}
 
-		printf("%zu: expected statement\n", p->token->line);
-		exit(1);
+		struct node *lhs = parse_expr(p);
+		struct token *equal = parser_expect(p, token_kind_equal);
+		struct node *rhs = parse_expr(p);
+		parser_expect(p, token_kind_semi);
+
+		struct node *assign = node_create(node_kind_assign, equal);
+		node_add_kid(assign, lhs);
+		node_add_kid(assign, rhs);
+		return assign;
+	}
 	}
 }
 

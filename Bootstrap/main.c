@@ -19,12 +19,17 @@ static void assert(bool b) {
 #include "type.c"
 #include "codegen.c"
 
-int main(void) {
-	static const size_t buffer_size = 1024;
-	char buffer[buffer_size] = {0};
+int main(int argc, char **argv) {
+	if (argc != 2) {
+		fprintf(stderr, "ceramic: usage: ceramic <output path>\n");
+		return 1;
+	}
+	char *output_path = argv[1];
+
+	char buffer[1024] = {0};
 	size_t n = 0;
 
-	while (n < buffer_size - 1) {
+	while (n < countof(buffer) - 1) {
 		char c = (char)getchar();
 		if (c == EOF) break;
 		buffer[n++] = c;
@@ -32,5 +37,5 @@ int main(void) {
 
 	struct node *root = parse(buffer);
 	typecheck(root);
-	codegen(root, stdout);
+	codegen(root, fopen(output_path, "w"));
 }

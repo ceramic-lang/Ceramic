@@ -39,12 +39,35 @@ static void codegen_expr(struct node *expr, FILE *file) {
 	}
 }
 
+static void codegen_expr_address(struct node *expr, FILE *file) {
+	switch (expr->kind) {
+	case node_kind_name:
+		fprintf(file, "\tadd x9, x29, #-%zu\n", expr->local->offset);
+		break;
+
+	default:
+		printf("%zu: expression doesn’t have an address\n", expr->line);
+		exit(1);
+	}
+}
+
 static void codegen_stmt(struct node *proc, struct node *stmt, FILE *file) {
 	switch (stmt->kind) {
 	case node_kind_local:
 		codegen_expr(node_find(stmt, node_kind_initializer)->kids->next, file);
 		fprintf(file, "\tstr x9, [x29, #-%zu]\n", stmt->local->offset);
 		break;
+
+	case node_kind_assign: {
+		struct node *lhs = stmt->kids->next;
+		struct node *rhs = lhs->next;
+		codegen_expr_address(lhs, file);
+		fprintf(file, "\tstr x9, [sp, #-16]!\n");
+		codegen_expr(rhs, file);
+		fprintf(file, "\tldr x10, [sp], #16\n");
+		fprintf(file, "\tstr x9, [x10]\n");
+		break;
+	}
 
 	case node_kind_return:
 		codegen_expr(stmt->kids->next, file);
