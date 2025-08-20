@@ -97,6 +97,22 @@ proc main() int {
 	return foo
 }" "3: unknown variable “foo”"
 expect_error "proc main() int { 1 = 2; }" "1: expression doesn’t have an address"
-expect_error "proc main() int { x: int = *5; }" "1: expression doesn’t have an address"
+expect_error "proc main() int { x: *int = *5; }" "1: expression doesn’t have an address"
+expect_error "proc main() int { x: int; x = *x; }" "1: expected “int” but found “*int”"
+expect_error "proc main() int { x: int; x = x^; }" "1: can’t dereference non-pointer type “int”"
+expect_error "
+proc main() int {
+	x: foo
+}" "3: unknown type “foo”"
+expect_error "
+proc main() int {
+	x: 5
+}" "3: cannot use non-type expression as type"
+expect_error "proc main() int { x: int = x; }" "1: unknown variable “x”"
+expect_error "
+proc main() int {
+	i: int
+	return i + *i
+}" "4: expected “int” but found “*int”"
 
 rm "$asm_path" "$executable_path"

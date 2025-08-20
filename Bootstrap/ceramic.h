@@ -39,9 +39,21 @@ static char *const node_kind_strings[] = {
 		[node_kind_div] = "div",
 };
 
+enum type_kind {
+	type_kind_int,
+	type_kind_pointer,
+};
+
+struct type {
+	struct type *next;
+	enum type_kind kind;
+	struct type *inner;
+};
+
 struct local {
 	struct local *next;
 	char *name;
+	struct type *type;
 	size_t offset;
 };
 
