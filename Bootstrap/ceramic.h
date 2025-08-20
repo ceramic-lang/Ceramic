@@ -1,0 +1,43 @@
+enum node_kind {
+	node_kind_nil,
+	node_kind_root,
+	node_kind_proc,
+	node_kind_return,
+	node_kind_block,
+	node_kind_name,
+	node_kind_number,
+	node_kind_add,
+	node_kind_sub,
+	node_kind_mul,
+	node_kind_div,
+	node_kind__last,
+};
+
+static char *const node_kind_strings[] = {
+		[node_kind_nil] = "nil",
+		[node_kind_root] = "root",
+		[node_kind_proc] = "proc",
+		[node_kind_return] = "return",
+		[node_kind_block] = "block",
+		[node_kind_name] = "name",
+		[node_kind_number] = "number",
+		[node_kind_add] = "add",
+		[node_kind_sub] = "sub",
+		[node_kind_mul] = "mul",
+		[node_kind_div] = "div",
+};
+
+struct node {
+	struct node *next;
+	struct node *prev;
+	struct node *children;
+	enum node_kind kind;
+	char *name;
+	uint64_t value;
+};
+
+__attribute__((unused)) static void node_print(struct node *node);
+
+static struct node *parse(char *s);
+
+static void codegen(struct node *root, FILE *file);
