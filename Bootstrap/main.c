@@ -373,21 +373,7 @@ static struct node *parse_expr(struct parser *p) {
 	return parse_expr_rec(p, node_kind_nil);
 }
 
-static struct node *parse_stmt(struct parser *p) {
-	switch (parser_current(p)) {
-	case token_kind_return:
-		parser_bump(p, token_kind_return);
-		struct node *value = parse_expr(p);
-		parser_expect(p, token_kind_semi);
-		struct node *stmt = node_create(node_kind_return);
-		node_add_child(stmt, value);
-		return stmt;
-
-	default:
-		printf("%zu: expected statement\n", p->token->line);
-		exit(1);
-	}
-}
+static struct node *parse_stmt(struct parser *p);
 
 static struct node *parse_block(struct parser *p) {
 	parser_bump(p, token_kind_lbrace);
@@ -398,6 +384,25 @@ static struct node *parse_block(struct parser *p) {
 	}
 	parser_expect(p, token_kind_rbrace);
 	return block;
+}
+
+static struct node *parse_stmt(struct parser *p) {
+	switch (parser_current(p)) {
+	case token_kind_return:
+		parser_bump(p, token_kind_return);
+		struct node *value = parse_expr(p);
+		parser_expect(p, token_kind_semi);
+		struct node *stmt = node_create(node_kind_return);
+		node_add_child(stmt, value);
+		return stmt;
+
+	case token_kind_lbrace:
+		return parse_block(p);
+
+	default:
+		printf("%zu: expected statement\n", p->token->line);
+		exit(1);
+	}
 }
 
 static struct node *parse_proc(struct parser *p) {
@@ -476,6 +481,25 @@ static void codegen_expr(struct node *expr, FILE *file) {
 	}
 }
 
+static void codegen_stmt(struct node *stmt, FILE *file) {
+	switch (stmt->kind) {
+	case node_kind_return:
+		codegen_expr(stmt->children->next, file);
+		fprintf(file, "\tmov x0, x9\n");
+		fprintf(file, "\tret\n");
+		break;
+
+	case node_kind_block:
+		for (struct node *child = stmt->children->next; child != stmt->children; child = child->next) {
+			codegen_stmt(child, file);
+		}
+		break;
+
+	default:
+		unreachable();
+	}
+}
+
 static void codegen(struct node *root, FILE *file) {
 	assert(root->kind == node_kind_root);
 
@@ -484,15 +508,7 @@ static void codegen(struct node *root, FILE *file) {
 		fprintf(file, ".global _%s\n", proc->name);
 		fprintf(file, ".align 2\n");
 		fprintf(file, "_%s:\n", proc->name);
-
-		struct node *block = node_find(proc, node_kind_block);
-		assert(block);
-		for (struct node *stmt = block->children->next; stmt != block->children; stmt = stmt->next) {
-			assert(stmt->kind == node_kind_return);
-			codegen_expr(stmt->children->next, file);
-			fprintf(file, "\tmov x0, x9\n");
-			fprintf(file, "\tret\n");
-		}
+		codegen_stmt(node_find(proc, node_kind_block), file);
 	}
 }
 
