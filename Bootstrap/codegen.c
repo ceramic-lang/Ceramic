@@ -68,10 +68,16 @@ static void codegen_expr_address(struct node *expr, FILE *file) {
 
 static void codegen_stmt(struct node *proc, struct node *stmt, FILE *file) {
 	switch (stmt->kind) {
-	case node_kind_local:
-		codegen_expr(node_find(stmt, node_kind_initializer)->kids->next, file);
+	case node_kind_local: {
+		struct node *initializer = node_find(stmt, node_kind_initializer);
+		if (initializer) {
+			codegen_expr(initializer->kids->next, file);
+		} else {
+			fprintf(file, "\tmov x9, #0\n");
+		}
 		fprintf(file, "\tstr x9, [x29, #-%zu]\n", stmt->local->offset);
 		break;
+	}
 
 	case node_kind_assign: {
 		struct node *lhs = stmt->kids->next;

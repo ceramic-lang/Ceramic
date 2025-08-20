@@ -392,21 +392,24 @@ static struct node *parse_stmt(struct parser *p) {
 	default: {
 		if (parser_at(p, token_kind_name) && parser_peek(p) == token_kind_colon) {
 			struct token *name = parser_bump(p, token_kind_name);
-			struct token *colon = parser_bump(p, token_kind_colon);
-			struct node *type_expr = parse_expr(p);
-			struct token *equal = parser_expect(p, token_kind_equal);
-			struct node *initializer_expr = parse_expr(p);
-			parser_expect(p, token_kind_semi);
-
-			struct node *type = node_create(node_kind_type, colon);
-			struct node *initializer = node_create(node_kind_initializer, equal);
-			node_add_kid(type, type_expr);
-			node_add_kid(initializer, initializer_expr);
-
 			struct node *local = node_create(node_kind_local, name);
 			local->name = name->string;
+
+			struct token *colon = parser_bump(p, token_kind_colon);
+			struct node *type_expr = parse_expr(p);
+			struct node *type = node_create(node_kind_type, colon);
+			node_add_kid(type, type_expr);
 			node_add_kid(local, type);
-			node_add_kid(local, initializer);
+
+			if (!parser_at(p, token_kind_semi)) {
+				struct token *equal = parser_expect(p, token_kind_equal);
+				struct node *initializer_expr = parse_expr(p);
+				struct node *initializer = node_create(node_kind_initializer, equal);
+				node_add_kid(initializer, initializer_expr);
+				node_add_kid(local, initializer);
+			}
+
+			parser_expect(p, token_kind_semi);
 			return local;
 		}
 

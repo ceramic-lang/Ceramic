@@ -13,7 +13,7 @@ static void check_node(struct node *proc, struct node *node) {
 	switch (node->kind) {
 	case node_kind_local: {
 		struct node *initializer = node_find(node, node_kind_initializer);
-		check_node(proc, initializer);
+		if (initializer) check_node(proc, initializer);
 		add_local(proc, node);
 		break;
 	}

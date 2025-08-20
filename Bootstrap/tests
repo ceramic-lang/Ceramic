@@ -84,6 +84,7 @@ proc main() int {
 	np^ = 9
 	return n + np^
 }" "18"
+expect_equal "proc main() int { n: int; n = n * 5 + 3; return n; }" "3"
 
 expect_error "proc main() int { return 0 }" "1: expected “;”, found “}”"
 expect_error "\`" "1: invalid token “\`”"
@@ -96,5 +97,6 @@ proc main() int {
 	return foo
 }" "3: unknown variable “foo”"
 expect_error "proc main() int { 1 = 2; }" "1: expression doesn’t have an address"
+expect_error "proc main() int { x: int = *5; }" "1: expression doesn’t have an address"
 
 rm "$asm_path" "$executable_path"
