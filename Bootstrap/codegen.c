@@ -1,21 +1,21 @@
-static void codegen_expr_address(struct node *expr, FILE *file);
+static void codegen_node_address(struct node *proc, struct node *node, FILE *file);
 
-static void codegen_expr(struct node *expr, FILE *file) {
-	switch (expr->kind) {
+static void codegen_node(struct node *proc, struct node *node, FILE *file) {
+	switch (node->kind) {
 	case node_kind_name:
-		fprintf(file, "\tldr x9, [x29, #-%zu]\n", expr->local->offset);
+		fprintf(file, "\tldr x9, [x29, #-%zu]\n", node->local->offset);
 		break;
 
 	case node_kind_number:
-		fprintf(file, "\tmov x9, #%llu\n", expr->value);
+		fprintf(file, "\tmov x9, #%llu\n", node->value);
 		break;
 
 	case node_kind_address:
-		codegen_expr_address(expr->kids->next, file);
+		codegen_node_address(proc, node->kids->next, file);
 		break;
 
 	case node_kind_deref:
-		codegen_expr(expr->kids->next, file);
+		codegen_node(proc, node->kids->next, file);
 		fprintf(file, "\tldr x9, [x9]\n");
 		break;
 
@@ -23,11 +23,11 @@ static void codegen_expr(struct node *expr, FILE *file) {
 	case node_kind_sub:
 	case node_kind_mul:
 	case node_kind_div:
-		codegen_expr(expr->kids->next, file);
+		codegen_node(proc, node->kids->next, file);
 		fprintf(file, "\tstr x9, [sp, #-16]!\n");
-		codegen_expr(expr->kids->next->next, file);
+		codegen_node(proc, node->kids->next->next, file);
 		fprintf(file, "\tldr x10, [sp], #16\n");
-		switch (expr->kind) {
+		switch (node->kind) {
 		case node_kind_add:
 			fprintf(file, "\tadd x9, x10, x9\n");
 			break;
@@ -45,65 +45,63 @@ static void codegen_expr(struct node *expr, FILE *file) {
 		}
 		break;
 
-	default:
-		unreachable();
-	}
-}
-
-static void codegen_expr_address(struct node *expr, FILE *file) {
-	switch (expr->kind) {
-	case node_kind_name:
-		fprintf(file, "\tsub x9, x29, #%zu\n", expr->local->offset);
-		break;
-
-	case node_kind_deref:
-		codegen_expr(expr->kids->next, file);
-		break;
-
-	default:
-		printf("%zu: expression doesn’t have an address\n", expr->line);
-		exit(1);
-	}
-}
-
-static void codegen_stmt(struct node *proc, struct node *stmt, FILE *file) {
-	switch (stmt->kind) {
 	case node_kind_local: {
-		struct node *initializer = node_find(stmt, node_kind_initializer);
+		struct node *initializer = node_find(node, node_kind_initializer);
 		if (initializer) {
-			codegen_expr(initializer->kids->next, file);
+			codegen_node(proc, initializer->kids->next, file);
 		} else {
 			fprintf(file, "\tmov x9, #0\n");
 		}
-		fprintf(file, "\tstr x9, [x29, #-%zu]\n", stmt->local->offset);
+		fprintf(file, "\tstr x9, [x29, #-%zu]\n", node->local->offset);
 		break;
 	}
 
 	case node_kind_assign: {
-		struct node *lhs = stmt->kids->next;
+		struct node *lhs = node->kids->next;
 		struct node *rhs = lhs->next;
-		codegen_expr_address(lhs, file);
+		codegen_node_address(proc, lhs, file);
 		fprintf(file, "\tstr x9, [sp, #-16]!\n");
-		codegen_expr(rhs, file);
+		codegen_node(proc, rhs, file);
 		fprintf(file, "\tldr x10, [sp], #16\n");
 		fprintf(file, "\tstr x9, [x10]\n");
 		break;
 	}
 
 	case node_kind_return:
-		codegen_expr(stmt->kids->next, file);
+		codegen_node(proc, node->kids->next, file);
 		fprintf(file, "\tmov x0, x9\n");
 		fprintf(file, "\tb .L.%s.return\n", proc->name);
 		break;
 
 	case node_kind_block:
-		for (struct node *kid = stmt->kids->next; kid != stmt->kids; kid = kid->next) {
-			codegen_stmt(proc, kid, file);
+		for (struct node *kid = node->kids->next; kid != node->kids; kid = kid->next) {
+			codegen_node(proc, kid, file);
 		}
 		break;
 
-	default:
+	case node_kind_nil:
+	case node_kind_root:
+	case node_kind_proc:
+	case node_kind_initializer:
+	case node_kind_type:
+	case node_kind__last:
 		unreachable();
+	}
+}
+
+static void codegen_node_address(struct node *proc, struct node *node, FILE *file) {
+	switch (node->kind) {
+	case node_kind_name:
+		fprintf(file, "\tsub x9, x29, #%zu\n", node->local->offset);
+		break;
+
+	case node_kind_deref:
+		codegen_node(proc, node->kids->next, file);
+		break;
+
+	default:
+		printf("%zu: expression doesn’t have an address\n", node->line);
+		exit(1);
 	}
 }
 
@@ -131,7 +129,7 @@ static void codegen(struct node *root, FILE *file) {
 		fprintf(file, "\tsub sp, sp, #%zu\n", locals_size);
 
 		struct node *body = node_find(proc, node_kind_block);
-		codegen_stmt(proc, body, file);
+		codegen_node(proc, body, file);
 
 		fprintf(file, ".L.%s.return:\n", proc->name);
 		fprintf(file, "\tadd sp, sp, #%zu\n", locals_size);
