@@ -149,11 +149,19 @@ static struct type *check_node(struct node *proc, struct node *node) {
 		return type_int();
 	}
 
-	default:
+	case node_kind_block:
 		for (struct node *kid = node->kids->next; kid != node->kids; kid = kid->next) {
 			check_node(proc, kid);
 		}
 		return 0;
+
+	case node_kind_nil:
+	case node_kind_root:
+	case node_kind_proc:
+	case node_kind_initializer:
+	case node_kind_type:
+	case node_kind__last:
+		unreachable();
 	}
 }
 
