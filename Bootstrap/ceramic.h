@@ -21,23 +21,23 @@ enum node_kind {
 };
 
 static char *const node_kind_strings[] = {
-		[node_kind_nil] = "nil",
-		[node_kind_root] = "root",
-		[node_kind_proc] = "proc",
-		[node_kind_local] = "local",
-		[node_kind_type] = "type",
-		[node_kind_initializer] = "initializer",
-		[node_kind_assign] = "assign",
-		[node_kind_return] = "return",
-		[node_kind_block] = "block",
-		[node_kind_address] = "address",
-		[node_kind_deref] = "deref",
-		[node_kind_name] = "name",
-		[node_kind_number] = "number",
-		[node_kind_add] = "add",
-		[node_kind_sub] = "sub",
-		[node_kind_mul] = "mul",
-		[node_kind_div] = "div",
+        [node_kind_nil] = "nil",
+        [node_kind_root] = "root",
+        [node_kind_proc] = "proc",
+        [node_kind_local] = "local",
+        [node_kind_type] = "type",
+        [node_kind_initializer] = "initializer",
+        [node_kind_assign] = "assign",
+        [node_kind_return] = "return",
+        [node_kind_block] = "block",
+        [node_kind_address] = "address",
+        [node_kind_deref] = "deref",
+        [node_kind_name] = "name",
+        [node_kind_number] = "number",
+        [node_kind_add] = "add",
+        [node_kind_sub] = "sub",
+        [node_kind_mul] = "mul",
+        [node_kind_div] = "div",
 };
 
 enum type_kind {
@@ -72,6 +72,13 @@ struct node {
 	struct type *return_type;
 };
 
+static const struct node node_nil = {
+        .next = (struct node *)&node_nil,
+        .prev = (struct node *)&node_nil,
+        .kids = (struct node *)&node_nil,
+};
+
+static bool node_is_nil(struct node *node);
 __attribute__((unused)) static void node_print(struct node *node);
 
 static struct node *parse(char *s);

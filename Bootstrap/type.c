@@ -74,7 +74,7 @@ static struct type *check_node(struct node *proc, struct node *node) {
 		struct type *type = type_from_expr(type_expr);
 
 		struct node *initializer = node_find(node, node_kind_initializer);
-		if (initializer) {
+		if (!node_is_nil(initializer)) {
 			struct type *initializer_type = check_node(proc, initializer->kids->next);
 			expect_types_equal(type, initializer_type, initializer->line);
 		}
@@ -144,7 +144,7 @@ static struct type *check_node(struct node *proc, struct node *node) {
 		char *name = node_find(node, node_kind_name)->name;
 		struct node *match = 0;
 
-		for (struct node *candidate = current_root->kids->next; candidate != current_root->kids;
+		for (struct node *candidate = current_root->kids->next; !node_is_nil(candidate);
 		        candidate = candidate->next) {
 			if (strcmp(candidate->name, name) == 0) {
 				match = candidate;
@@ -172,7 +172,7 @@ static struct type *check_node(struct node *proc, struct node *node) {
 	}
 
 	case node_kind_block:
-		for (struct node *kid = node->kids->next; kid != node->kids; kid = kid->next) {
+		for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
 			check_node(proc, kid);
 		}
 		return 0;
@@ -190,12 +190,12 @@ static struct type *check_node(struct node *proc, struct node *node) {
 static void typecheck(struct node *root) {
 	current_root = root;
 
-	for (struct node *proc = root->kids->next; proc != root->kids; proc = proc->next) {
+	for (struct node *proc = root->kids->next; !node_is_nil(proc); proc = proc->next) {
 		assert(proc->kind == node_kind_proc);
 		proc->return_type = type_from_expr(node_find(proc, node_kind_type)->kids->next);
 	}
 
-	for (struct node *proc = root->kids->next; proc != root->kids; proc = proc->next) {
+	for (struct node *proc = root->kids->next; !node_is_nil(proc); proc = proc->next) {
 		assert(proc->kind == node_kind_proc);
 		struct node *body = node_find(proc, node_kind_block);
 		check_node(proc, body);

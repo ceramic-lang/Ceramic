@@ -175,6 +175,11 @@ static struct tokens lex(char *s) {
 	return tokens;
 }
 
+static bool node_is_nil(struct node *node) {
+	bool result = node == 0 || node->kind == 0;
+	return result;
+}
+
 static struct node *node_create(enum node_kind kind, struct token *token) {
 	struct node *node = calloc(1, sizeof(struct node));
 	node->kind = kind;
@@ -193,8 +198,8 @@ static void node_add_kid(struct node *node, struct node *kid) {
 }
 
 static struct node *node_find(struct node *node, enum node_kind kind) {
-	struct node *result = 0;
-	for (struct node *kid = node->kids->next; kid != node->kids; kid = kid->next) {
+	struct node *result = (struct node *)&node_nil;
+	for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
 		if (kid->kind == kind) {
 			result = kid;
 			break;
@@ -210,7 +215,7 @@ static void node_print_with_indentation(struct node *node, size_t indentation) {
 	if (node->name) fprintf(stderr, " (%s)", node->name);
 	fprintf(stderr, " (%llu)\n", node->value);
 
-	for (struct node *kid = node->kids->next; kid != node->kids; kid = kid->next) {
+	for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
 		node_print_with_indentation(kid, indentation + 1);
 	}
 }

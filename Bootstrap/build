@@ -1,7 +1,7 @@
 #!/bin/sh
 
 cd "$(dirname "$(readlink -f "$0")")" || exit
-clang-format -i ./*.c
+clang-format -i ./*.c ./*.h
 clang \
 	-Wall \
 	-Wextra \

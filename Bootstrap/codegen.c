@@ -53,10 +53,10 @@ static void codegen_node(struct node *proc, struct node *node, FILE *file) {
 
 	case node_kind_local: {
 		struct node *initializer = node_find(node, node_kind_initializer);
-		if (initializer) {
-			codegen_node(proc, initializer->kids->next, file);
-		} else {
+		if (node_is_nil(initializer)) {
 			fprintf(file, "\tmov x9, #0\n");
+		} else {
+			codegen_node(proc, initializer->kids->next, file);
 		}
 		fprintf(file, "\tstr x9, [x29, #-%zu]\n", node->local->offset);
 		break;
@@ -80,7 +80,7 @@ static void codegen_node(struct node *proc, struct node *node, FILE *file) {
 		break;
 
 	case node_kind_block:
-		for (struct node *kid = node->kids->next; kid != node->kids; kid = kid->next) {
+		for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
 			codegen_node(proc, kid, file);
 		}
 		break;
@@ -123,7 +123,7 @@ static size_t round_up(size_t n, size_t m) {
 static void codegen(struct node *root, FILE *file) {
 	assert(root->kind == node_kind_root);
 
-	for (struct node *proc = root->kids->next; proc != root->kids; proc = proc->next) {
+	for (struct node *proc = root->kids->next; !node_is_nil(proc); proc = proc->next) {
 		assert(proc->kind == node_kind_proc);
 		fprintf(file, ".global _%s\n", proc->name);
 		fprintf(file, ".align 2\n");
