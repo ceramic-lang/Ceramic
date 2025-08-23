@@ -10,6 +10,7 @@ enum node_kind {
 	node_kind_block,
 	node_kind_address,
 	node_kind_deref,
+	node_kind_call,
 	node_kind_name,
 	node_kind_number,
 	node_kind_add,

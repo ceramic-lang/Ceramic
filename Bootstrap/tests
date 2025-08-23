@@ -85,6 +85,7 @@ proc main() int {
 	return n + np^
 }" "18"
 expect_equal "proc main() int { n: int; n = n * 5 + 3; return n; }" "3"
+expect_equal "proc main() int { return a(); } proc a() int { return 5; }" "5"
 
 expect_error "proc main() int { return 0 }" "1: expected “;”, found “}”"
 expect_error "\`" "1: invalid token “\`”"
@@ -119,5 +120,9 @@ proc main() int {
 	p: *int
 	return p
 }" "4: expected “int” but found “*int”"
+expect_error "
+proc main() int {
+	return foo();
+}" "3: unknown procedure “foo”"
 
 rm "$asm_path" "$executable_path"

@@ -62,6 +62,8 @@ static void expect_types_equal(struct type *expected, struct type *actual, size_
 	exit(1);
 }
 
+static struct node *current_root;
+
 static struct type *check_node(struct node *proc, struct node *node) {
 	switch (node->kind) {
 	case node_kind_number:
@@ -138,6 +140,26 @@ static struct type *check_node(struct node *proc, struct node *node) {
 		return type->inner;
 	}
 
+	case node_kind_call: {
+		char *name = node_find(node, node_kind_name)->name;
+		struct node *match = 0;
+
+		for (struct node *candidate = current_root->kids->next; candidate != current_root->kids;
+		        candidate = candidate->next) {
+			if (strcmp(candidate->name, name) == 0) {
+				match = candidate;
+				break;
+			}
+		}
+
+		if (!match) {
+			printf("%zu: unknown procedure “%s”\n", node->line, name);
+			exit(1);
+		}
+
+		return match->return_type;
+	}
+
 	case node_kind_add:
 	case node_kind_sub:
 	case node_kind_mul:
@@ -166,9 +188,15 @@ static struct type *check_node(struct node *proc, struct node *node) {
 }
 
 static void typecheck(struct node *root) {
+	current_root = root;
+
 	for (struct node *proc = root->kids->next; proc != root->kids; proc = proc->next) {
 		assert(proc->kind == node_kind_proc);
 		proc->return_type = type_from_expr(node_find(proc, node_kind_type)->kids->next);
+	}
+
+	for (struct node *proc = root->kids->next; proc != root->kids; proc = proc->next) {
+		assert(proc->kind == node_kind_proc);
 		struct node *body = node_find(proc, node_kind_block);
 		check_node(proc, body);
 	}

@@ -313,14 +313,29 @@ static struct node *parse_lhs(struct parser *p) {
 		exit(1);
 	}
 
-	if (parser_at(p, token_kind_caret)) {
-		struct token *token = parser_bump(p, token_kind_caret);
-		struct node *deref = node_create(node_kind_deref, token);
-		node_add_kid(deref, result);
-		result = deref;
-	}
+	while (true) {
+		switch (parser_current(p)) {
+		case token_kind_caret: {
+			struct token *token = parser_bump(p, token_kind_caret);
+			struct node *deref = node_create(node_kind_deref, token);
+			node_add_kid(deref, result);
+			result = deref;
+			break;
+		}
 
-	return result;
+		case token_kind_lparen: {
+			struct token *lparen = parser_bump(p, token_kind_lparen);
+			parser_expect(p, token_kind_rparen);
+			struct node *call = node_create(node_kind_call, lparen);
+			node_add_kid(call, result);
+			result = call;
+			break;
+		}
+
+		default:
+			return result;
+		}
+	}
 }
 
 static bool right_binds_tighter(enum node_kind left, enum node_kind right) {

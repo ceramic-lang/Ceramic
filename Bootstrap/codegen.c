@@ -19,6 +19,12 @@ static void codegen_node(struct node *proc, struct node *node, FILE *file) {
 		fprintf(file, "\tldr x9, [x9]\n");
 		break;
 
+	case node_kind_call: {
+		char *called_proc_name = node_find(node, node_kind_name)->name;
+		fprintf(file, "\tbl _%s\n", called_proc_name);
+		break;
+	}
+
 	case node_kind_add:
 	case node_kind_sub:
 	case node_kind_mul:
