@@ -416,10 +416,12 @@ static struct node *parse_stmt(struct parser *p) {
 			local->name = name->string;
 
 			struct token *colon = parser_bump(p, token_kind_colon);
-			struct node *type_expr = parse_expr(p);
-			struct node *type = node_create(node_kind_type, colon);
-			node_add_kid(type, type_expr);
-			node_add_kid(local, type);
+			if (!parser_at(p, token_kind_equal)) {
+				struct node *type_expr = parse_expr(p);
+				struct node *type = node_create(node_kind_type, colon);
+				node_add_kid(type, type_expr);
+				node_add_kid(local, type);
+			}
 
 			if (!parser_at(p, token_kind_semi)) {
 				struct token *equal = parser_expect(p, token_kind_equal);

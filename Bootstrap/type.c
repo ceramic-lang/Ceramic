@@ -71,12 +71,19 @@ static struct type *check_node(struct node *proc, struct node *node) {
 
 	case node_kind_local: {
 		struct node *type_expr = node_find(node, node_kind_type)->kids->next;
-		struct type *type = type_from_expr(type_expr);
-
 		struct node *initializer = node_find(node, node_kind_initializer);
-		if (!node_is_nil(initializer)) {
+
+		struct type *type = 0;
+		if (node_is_nil(initializer)) {
+			type = type_from_expr(type_expr);
+		} else {
 			struct type *initializer_type = check_node(proc, initializer->kids->next);
-			expect_types_equal(type, initializer_type, initializer->line);
+			if (node_is_nil(type_expr)) {
+				type = initializer_type;
+			} else {
+				type = type_from_expr(type_expr);
+				expect_types_equal(type, initializer_type, initializer->line);
+			}
 		}
 
 		struct local *local = calloc(1, sizeof(struct local));
