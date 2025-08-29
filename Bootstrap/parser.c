@@ -147,8 +147,7 @@ static struct tokens lex(char *s) {
 
 			token.kind = single_char_kinds[(size_t)*s];
 			if (token.kind == 0) {
-				printf("%zu: invalid token “%c”\n", line, *s);
-				exit(1);
+				error(line, "invalid token “%c”", *s);
 			}
 
 			s++;
@@ -271,9 +270,8 @@ static struct token *bump(struct parser *p, enum token_kind kind) {
 static struct token *expect(struct parser *p, enum token_kind kind) {
 	assert(kind != token_kind_eof);
 	if (!at(p, kind)) {
-		printf("%zu: expected %s, found %s\n", p->token->line, token_kind_strings[kind],
+		error(p->token->line, "expected %s, found %s", token_kind_strings[kind],
 		        token_kind_strings[current(p)]);
-		exit(1);
 	}
 	return bump(p, kind);
 }
@@ -314,8 +312,7 @@ static struct node *parse_lhs(struct parser *p) {
 	}
 
 	default:
-		printf("%zu: expected expression\n", p->token->line);
-		exit(1);
+		error(p->token->line, "expected expression");
 	}
 
 	while (true) {
@@ -466,8 +463,7 @@ static struct node *parse_proc(struct parser *p) {
 	}
 
 	if (!at(p, token_kind_lbrace)) {
-		printf("%zu: expected procedure body\n", p->token->line);
-		exit(1);
+		error(p->token->line, "expected procedure body");
 	}
 	struct node *block = parse_block(p);
 	node_add_kid(proc, block);
@@ -478,8 +474,7 @@ static struct node *parse_proc(struct parser *p) {
 static void parse_source_file(struct parser *p) {
 	while (!at(p, token_kind_eof)) {
 		if (!at(p, token_kind_proc)) {
-			printf("%zu: expected procedure\n", p->token->line);
-			exit(1);
+			error(p->token->line, "expected procedure");
 		}
 		struct node *proc = parse_proc(p);
 		node_add_kid(p->root, proc);

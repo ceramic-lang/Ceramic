@@ -29,15 +29,13 @@ static struct type *type_from_expr(struct node *expr) {
 	switch (expr->kind) {
 	case node_kind_name:
 		if (strcmp(expr->name, "int") == 0) return type_int();
-		printf("%zu: unknown type “%s”\n", expr->line, expr->name);
-		exit(1);
+		error(expr->line, "unknown type “%s”", expr->name);
 
 	case node_kind_address:
 		return type_pointer(type_from_expr(expr->kids->next));
 
 	default:
-		printf("%zu: cannot use non-type expression as type\n", expr->line);
-		exit(1);
+		error(expr->line, "cannot use non-type expression as type");
 	}
 }
 
@@ -58,8 +56,7 @@ static char *type_print(struct type *type) {
 
 static void expect_types_equal(struct type *expected, struct type *actual, size_t line) {
 	if (expected == actual) return;
-	printf("%zu: expected “%s” but found “%s”\n", line, type_print(expected), type_print(actual));
-	exit(1);
+	error(line, "expected “%s” but found “%s”", type_print(expected), type_print(actual));
 }
 
 static struct node *current_root;
@@ -111,8 +108,7 @@ static void check_node(struct node *proc, struct node *node) {
 		}
 
 		if (!node->local) {
-			printf("%zu: unknown variable “%s”\n", node->line, node->name);
-			exit(1);
+			error(node->line, "unknown variable “%s”", node->name);
 		}
 
 		node->type = node->local->type;
@@ -145,8 +141,7 @@ static void check_node(struct node *proc, struct node *node) {
 		struct node *operand = node->kids->next;
 		check_node(proc, operand);
 		if (operand->type->kind != type_kind_pointer) {
-			printf("%zu: can’t dereference non-pointer type “%s”\n", node->line, type_print(operand->type));
-			exit(1);
+			error(node->line, "can’t dereference non-pointer type “%s”", type_print(operand->type));
 		}
 		node->type = operand->type->inner;
 		break;
@@ -165,8 +160,7 @@ static void check_node(struct node *proc, struct node *node) {
 		}
 
 		if (!match) {
-			printf("%zu: unknown procedure “%s”\n", node->line, name);
-			exit(1);
+			error(node->line, "unknown procedure “%s”", name);
 		}
 
 		node->type = match->type;

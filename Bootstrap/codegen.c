@@ -106,8 +106,7 @@ static void codegen_node_address(struct node *proc, struct node *node, FILE *fil
 		break;
 
 	default:
-		printf("%zu: expression doesn’t have an address\n", node->line);
-		exit(1);
+		error(node->line, "expression doesn’t have an address");
 	}
 }
 

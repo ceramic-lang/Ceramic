@@ -1,8 +1,9 @@
-#include <stdio.h>
+#include <stdarg.h>
 #include <stdbool.h>
-#include <string.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define countof(array) (sizeof(array) / sizeof((array)[0]))
 
@@ -12,6 +13,16 @@ _Noreturn static void unreachable(void) {
 
 static void assert(bool b) {
 	if (!b) unreachable();
+}
+
+__attribute__((format(printf, 2, 3))) _Noreturn static void error(size_t line, char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	printf("%zu: ", line);
+	vprintf(fmt, ap);
+	printf("\n");
+	va_end(ap);
+	exit(1);
 }
 
 #include "ceramic.h"
