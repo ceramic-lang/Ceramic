@@ -240,21 +240,21 @@ static uint64_t parse_number(char *s) {
 	return result;
 }
 
-static enum token_kind parser_current(struct parser *p) {
+static enum token_kind current(struct parser *p) {
 	return p->token->kind;
 }
 
-static enum token_kind parser_peek(struct parser *p) {
+static enum token_kind peek(struct parser *p) {
 	if (p->remaining_tokens == 0) return token_kind_eof;
 	return (p->token + 1)->kind;
 }
 
-static bool parser_at(struct parser *p, enum token_kind kind) {
-	return parser_current(p) == kind;
+static bool at(struct parser *p, enum token_kind kind) {
+	return current(p) == kind;
 }
 
-static struct token *parser_bump(struct parser *p, enum token_kind kind) {
-	assert(parser_at(p, kind));
+static struct token *bump(struct parser *p, enum token_kind kind) {
+	assert(at(p, kind));
 	struct token *token = p->token;
 	p->remaining_tokens--;
 	if (p->remaining_tokens == 0) {
@@ -268,14 +268,14 @@ static struct token *parser_bump(struct parser *p, enum token_kind kind) {
 	return token;
 }
 
-static struct token *parser_expect(struct parser *p, enum token_kind kind) {
+static struct token *expect(struct parser *p, enum token_kind kind) {
 	assert(kind != token_kind_eof);
-	if (!parser_at(p, kind)) {
+	if (!at(p, kind)) {
 		printf("%zu: expected %s, found %s\n", p->token->line, token_kind_strings[kind],
-		        token_kind_strings[parser_current(p)]);
+		        token_kind_strings[current(p)]);
 		exit(1);
 	}
-	return parser_bump(p, kind);
+	return bump(p, kind);
 }
 
 static struct node *parse_expr(struct parser *p);
@@ -283,23 +283,23 @@ static struct node *parse_expr(struct parser *p);
 static struct node *parse_lhs(struct parser *p) {
 	struct node *result = 0;
 
-	switch (parser_current(p)) {
+	switch (current(p)) {
 	case token_kind_number: {
-		struct token *token = parser_bump(p, token_kind_number);
+		struct token *token = bump(p, token_kind_number);
 		result = node_create(node_kind_number, token);
 		result->value = parse_number(token->string);
 		break;
 	}
 
 	case token_kind_name: {
-		struct token *token = parser_bump(p, token_kind_name);
+		struct token *token = bump(p, token_kind_name);
 		result = node_create(node_kind_name, token);
 		result->name = token->string;
 		break;
 	}
 
 	case token_kind_asterisk: {
-		struct token *token = parser_bump(p, token_kind_asterisk);
+		struct token *token = bump(p, token_kind_asterisk);
 		struct node *pointee = parse_lhs(p);
 		result = node_create(node_kind_address, token);
 		node_add_kid(result, pointee);
@@ -307,9 +307,9 @@ static struct node *parse_lhs(struct parser *p) {
 	}
 
 	case token_kind_lparen: {
-		parser_bump(p, token_kind_lparen);
+		bump(p, token_kind_lparen);
 		result = parse_expr(p);
-		parser_expect(p, token_kind_rparen);
+		expect(p, token_kind_rparen);
 		break;
 	}
 
@@ -319,9 +319,9 @@ static struct node *parse_lhs(struct parser *p) {
 	}
 
 	while (true) {
-		switch (parser_current(p)) {
+		switch (current(p)) {
 		case token_kind_caret: {
-			struct token *token = parser_bump(p, token_kind_caret);
+			struct token *token = bump(p, token_kind_caret);
 			struct node *deref = node_create(node_kind_deref, token);
 			node_add_kid(deref, result);
 			result = deref;
@@ -329,8 +329,8 @@ static struct node *parse_lhs(struct parser *p) {
 		}
 
 		case token_kind_lparen: {
-			struct token *lparen = parser_bump(p, token_kind_lparen);
-			parser_expect(p, token_kind_rparen);
+			struct token *lparen = bump(p, token_kind_lparen);
+			expect(p, token_kind_rparen);
 			struct node *call = node_create(node_kind_call, lparen);
 			node_add_kid(call, result);
 			result = call;
@@ -364,9 +364,9 @@ static struct node *parse_expr_rec(struct parser *p, enum node_kind left_node_ki
 		        [token_kind_slash] = node_kind_div,
 		};
 
-		enum node_kind right_node_kind = node_kinds[parser_current(p)];
+		enum node_kind right_node_kind = node_kinds[current(p)];
 		if (!right_binds_tighter(left_node_kind, right_node_kind)) break;
-		struct token *operator_token = parser_bump(p, parser_current(p));
+		struct token *operator_token = bump(p, current(p));
 		struct node *rhs = parse_expr_rec(p, right_node_kind);
 
 		struct node *new_lhs = node_create(right_node_kind, operator_token);
@@ -385,22 +385,22 @@ static struct node *parse_expr(struct parser *p) {
 static struct node *parse_stmt(struct parser *p);
 
 static struct node *parse_block(struct parser *p) {
-	struct token *lbrace_token = parser_bump(p, token_kind_lbrace);
+	struct token *lbrace_token = bump(p, token_kind_lbrace);
 	struct node *block = node_create(node_kind_block, lbrace_token);
-	while (!parser_at(p, token_kind_rbrace)) {
+	while (!at(p, token_kind_rbrace)) {
 		struct node *stmt = parse_stmt(p);
 		node_add_kid(block, stmt);
 	}
-	parser_expect(p, token_kind_rbrace);
+	expect(p, token_kind_rbrace);
 	return block;
 }
 
 static struct node *parse_stmt(struct parser *p) {
-	switch (parser_current(p)) {
+	switch (current(p)) {
 	case token_kind_return: {
-		struct token *token = parser_bump(p, token_kind_return);
+		struct token *token = bump(p, token_kind_return);
 		struct node *value = parse_expr(p);
-		parser_expect(p, token_kind_semi);
+		expect(p, token_kind_semi);
 		struct node *stmt = node_create(node_kind_return, token);
 		node_add_kid(stmt, value);
 		return stmt;
@@ -410,35 +410,35 @@ static struct node *parse_stmt(struct parser *p) {
 		return parse_block(p);
 
 	default: {
-		if (parser_at(p, token_kind_name) && parser_peek(p) == token_kind_colon) {
-			struct token *name = parser_bump(p, token_kind_name);
+		if (at(p, token_kind_name) && peek(p) == token_kind_colon) {
+			struct token *name = bump(p, token_kind_name);
 			struct node *local = node_create(node_kind_local, name);
 			local->name = name->string;
 
-			struct token *colon = parser_bump(p, token_kind_colon);
-			if (!parser_at(p, token_kind_equal)) {
+			struct token *colon = bump(p, token_kind_colon);
+			if (!at(p, token_kind_equal)) {
 				struct node *type_expr = parse_expr(p);
 				struct node *type = node_create(node_kind_type, colon);
 				node_add_kid(type, type_expr);
 				node_add_kid(local, type);
 			}
 
-			if (!parser_at(p, token_kind_semi)) {
-				struct token *equal = parser_expect(p, token_kind_equal);
+			if (!at(p, token_kind_semi)) {
+				struct token *equal = expect(p, token_kind_equal);
 				struct node *initializer_expr = parse_expr(p);
 				struct node *initializer = node_create(node_kind_initializer, equal);
 				node_add_kid(initializer, initializer_expr);
 				node_add_kid(local, initializer);
 			}
 
-			parser_expect(p, token_kind_semi);
+			expect(p, token_kind_semi);
 			return local;
 		}
 
 		struct node *lhs = parse_expr(p);
-		struct token *equal = parser_expect(p, token_kind_equal);
+		struct token *equal = expect(p, token_kind_equal);
 		struct node *rhs = parse_expr(p);
-		parser_expect(p, token_kind_semi);
+		expect(p, token_kind_semi);
 
 		struct node *assign = node_create(node_kind_assign, equal);
 		node_add_kid(assign, lhs);
@@ -449,15 +449,15 @@ static struct node *parse_stmt(struct parser *p) {
 }
 
 static struct node *parse_proc(struct parser *p) {
-	struct token *proc_token = parser_bump(p, token_kind_proc);
-	struct token *name_token = parser_expect(p, token_kind_name);
+	struct token *proc_token = bump(p, token_kind_proc);
+	struct token *name_token = expect(p, token_kind_name);
 	struct node *proc = node_create(node_kind_proc, proc_token);
 	proc->name = name_token->string;
 
-	parser_expect(p, token_kind_lparen);
-	parser_expect(p, token_kind_rparen);
+	expect(p, token_kind_lparen);
+	expect(p, token_kind_rparen);
 
-	if (!parser_at(p, token_kind_lbrace)) {
+	if (!at(p, token_kind_lbrace)) {
 		struct token *first_return_type_token = p->token;
 		struct node *return_type_expr = parse_expr(p);
 		struct node *return_type = node_create(node_kind_type, first_return_type_token);
@@ -465,7 +465,7 @@ static struct node *parse_proc(struct parser *p) {
 		node_add_kid(proc, return_type);
 	}
 
-	if (!parser_at(p, token_kind_lbrace)) {
+	if (!at(p, token_kind_lbrace)) {
 		printf("%zu: expected procedure body\n", p->token->line);
 		exit(1);
 	}
@@ -476,8 +476,8 @@ static struct node *parse_proc(struct parser *p) {
 }
 
 static void parse_source_file(struct parser *p) {
-	while (!parser_at(p, token_kind_eof)) {
-		if (!parser_at(p, token_kind_proc)) {
+	while (!at(p, token_kind_eof)) {
+		if (!at(p, token_kind_proc)) {
 			printf("%zu: expected procedure\n", p->token->line);
 			exit(1);
 		}
