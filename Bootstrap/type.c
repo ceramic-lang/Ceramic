@@ -64,10 +64,11 @@ static void expect_types_equal(struct type *expected, struct type *actual, size_
 
 static struct node *current_root;
 
-static struct type *check_node(struct node *proc, struct node *node) {
+static void check_node(struct node *proc, struct node *node) {
 	switch (node->kind) {
 	case node_kind_number:
-		return type_int();
+		node->type = type_int();
+		break;
 
 	case node_kind_local: {
 		struct node *type_expr = node_find(node, node_kind_type)->kids->next;
@@ -77,12 +78,13 @@ static struct type *check_node(struct node *proc, struct node *node) {
 		if (node_is_nil(initializer)) {
 			type = type_from_expr(type_expr);
 		} else {
-			struct type *initializer_type = check_node(proc, initializer->kids->next);
+			struct node *initializer_expr = initializer->kids->next;
+			check_node(proc, initializer_expr);
 			if (node_is_nil(type_expr)) {
-				type = initializer_type;
+				type = initializer_expr->type;
 			} else {
 				type = type_from_expr(type_expr);
-				expect_types_equal(type, initializer_type, initializer->line);
+				expect_types_equal(type, initializer_expr->type, initializer->line);
 			}
 		}
 
@@ -97,54 +99,57 @@ static struct type *check_node(struct node *proc, struct node *node) {
 		proc->locals_size += 8;
 
 		node->local = local;
-		return local->type;
+		break;
 	}
 
-	case node_kind_name: {
-		struct local *match = 0;
+	case node_kind_name:
 		for (struct local *local = proc->local; local; local = local->next) {
 			if (strcmp(local->name, node->name) == 0) {
-				match = local;
+				node->local = local;
+				break;
 			}
 		}
 
-		if (!match) {
+		if (!node->local) {
 			printf("%zu: unknown variable “%s”\n", node->line, node->name);
 			exit(1);
 		}
 
-		node->local = match;
-		return match->type;
-	}
+		node->type = node->local->type;
+		break;
 
 	case node_kind_assign: {
 		struct node *lhs = node->kids->next;
 		struct node *rhs = lhs->next;
-		struct type *lhs_type = check_node(proc, lhs);
-		struct type *rhs_type = check_node(proc, rhs);
-		expect_types_equal(lhs_type, rhs_type, rhs->line);
-		return 0;
+		check_node(proc, lhs);
+		check_node(proc, rhs);
+		expect_types_equal(lhs->type, rhs->type, rhs->line);
+		break;
 	}
 
 	case node_kind_return: {
 		struct node *return_value = node->kids->next;
-		struct type *return_value_type = check_node(proc, return_value);
-		expect_types_equal(proc->return_type, return_value_type, return_value->line);
-		return 0;
+		check_node(proc, return_value);
+		expect_types_equal(proc->type, return_value->type, return_value->line);
+		break;
 	}
 
 	case node_kind_address: {
-		struct type *pointee = check_node(proc, node->kids->next);
-		return type_pointer(pointee);
+		struct node *operand = node->kids->next;
+		check_node(proc, operand);
+		node->type = type_pointer(operand->type);
+		break;
 	}
 
 	case node_kind_deref: {
-		struct type *type = check_node(proc, node->kids->next);
-		if (type->kind != type_kind_pointer) {
-			printf("%zu: can’t dereference non-pointer type “%s”\n", node->line, type_print(type));
+		struct node *operand = node->kids->next;
+		check_node(proc, operand);
+		if (operand->type->kind != type_kind_pointer) {
+			printf("%zu: can’t dereference non-pointer type “%s”\n", node->line, type_print(operand->type));
 			exit(1);
 		}
-		return type->inner;
+		node->type = operand->type->inner;
+		break;
 	}
 
 	case node_kind_call: {
@@ -164,7 +169,8 @@ static struct type *check_node(struct node *proc, struct node *node) {
 			exit(1);
 		}
 
-		return match->return_type;
+		node->type = match->type;
+		break;
 	}
 
 	case node_kind_add:
@@ -173,16 +179,19 @@ static struct type *check_node(struct node *proc, struct node *node) {
 	case node_kind_div: {
 		struct node *lhs = node->kids->next;
 		struct node *rhs = lhs->next;
-		expect_types_equal(type_int(), check_node(proc, lhs), lhs->line);
-		expect_types_equal(type_int(), check_node(proc, rhs), rhs->line);
-		return type_int();
+		check_node(proc, lhs);
+		check_node(proc, rhs);
+		expect_types_equal(type_int(), lhs->type, lhs->line);
+		expect_types_equal(type_int(), rhs->type, rhs->line);
+		node->type = type_int();
+		break;
 	}
 
 	case node_kind_block:
 		for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
 			check_node(proc, kid);
 		}
-		return 0;
+		break;
 
 	case node_kind_nil:
 	case node_kind_root:
@@ -199,7 +208,7 @@ static void typecheck(struct node *root) {
 
 	for (struct node *proc = root->kids->next; !node_is_nil(proc); proc = proc->next) {
 		assert(proc->kind == node_kind_proc);
-		proc->return_type = type_from_expr(node_find(proc, node_kind_type)->kids->next);
+		proc->type = type_from_expr(node_find(proc, node_kind_type)->kids->next);
 	}
 
 	for (struct node *proc = root->kids->next; !node_is_nil(proc); proc = proc->next) {

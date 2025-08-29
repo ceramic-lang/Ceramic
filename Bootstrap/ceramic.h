@@ -67,9 +67,9 @@ struct node {
 	uint64_t value;
 	size_t line;
 
+	struct type *type;
 	struct local *local;
 	size_t locals_size;
-	struct type *return_type;
 };
 
 static const struct node node_nil = {
