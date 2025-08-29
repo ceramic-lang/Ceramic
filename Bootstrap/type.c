@@ -34,14 +34,18 @@ static struct type *type_from_expr(struct node *expr) {
 	case node_kind_address:
 		return type_pointer(type_from_expr(expr->kids->next));
 
+	case node_kind_nil:
+		return 0;
+
 	default:
 		error(expr->line, "cannot use non-type expression as type");
 	}
 }
 
 static char *type_print(struct type *type) {
-	char *result = 0;
+	if (!type) return "non-value";
 
+	char *result = 0;
 	switch (type->kind) {
 	case type_kind_int:
 		result = "int";
@@ -50,7 +54,6 @@ static char *type_print(struct type *type) {
 		asprintf(&result, "*%s", type_print(type->inner));
 		break;
 	}
-
 	return result;
 }
 
@@ -77,6 +80,12 @@ static void check_node(struct node *proc, struct node *node) {
 		} else {
 			struct node *initializer_expr = initializer->kids->next;
 			check_node(proc, initializer_expr);
+
+			if (!initializer_expr->type) {
+				error(initializer_expr->line,
+				        "cannot initialize variable using expression without value");
+			}
+
 			if (node_is_nil(type_expr)) {
 				type = initializer_expr->type;
 			} else {
@@ -123,10 +132,26 @@ static void check_node(struct node *proc, struct node *node) {
 		break;
 	}
 
+	case node_kind_expr_stmt: {
+		struct node *expr = node->kids->next;
+		check_node(proc, expr);
+		if (expr->type) error(expr->line, "unused expression");
+		break;
+	}
+
 	case node_kind_return: {
 		struct node *return_value = node->kids->next;
-		check_node(proc, return_value);
-		expect_types_equal(proc->type, return_value->type, return_value->line);
+		if (node_is_nil(return_value)) {
+			if (proc->type) {
+				error(node->line, "missing return value");
+			}
+		} else {
+			if (!proc->type) {
+				error(node->line, "cannot return value from procedure with no return value");
+			}
+			check_node(proc, return_value);
+			expect_types_equal(proc->type, return_value->type, return_value->line);
+		}
 		break;
 	}
 

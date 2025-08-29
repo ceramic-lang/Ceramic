@@ -396,10 +396,12 @@ static struct node *parse_stmt(struct parser *p) {
 	switch (current(p)) {
 	case token_kind_return: {
 		struct token *token = bump(p, token_kind_return);
-		struct node *value = parse_expr(p);
-		expect(p, token_kind_semi);
 		struct node *stmt = node_create(node_kind_return, token);
-		node_add_kid(stmt, value);
+		if (!at(p, token_kind_semi)) {
+			struct node *value = parse_expr(p);
+			node_add_kid(stmt, value);
+		}
+		expect(p, token_kind_semi);
 		return stmt;
 	}
 
@@ -433,14 +435,20 @@ static struct node *parse_stmt(struct parser *p) {
 		}
 
 		struct node *lhs = parse_expr(p);
-		struct token *equal = expect(p, token_kind_equal);
-		struct node *rhs = parse_expr(p);
-		expect(p, token_kind_semi);
-
-		struct node *assign = node_create(node_kind_assign, equal);
-		node_add_kid(assign, lhs);
-		node_add_kid(assign, rhs);
-		return assign;
+		if (at(p, token_kind_equal)) {
+			struct token *equal = expect(p, token_kind_equal);
+			struct node *rhs = parse_expr(p);
+			expect(p, token_kind_semi);
+			struct node *assign = node_create(node_kind_assign, equal);
+			node_add_kid(assign, lhs);
+			node_add_kid(assign, rhs);
+			return assign;
+		} else {
+			struct token *semi = expect(p, token_kind_semi);
+			struct node *expr_stmt = node_create(node_kind_expr_stmt, semi);
+			node_add_kid(expr_stmt, lhs);
+			return expr_stmt;
+		}
 	}
 	}
 }

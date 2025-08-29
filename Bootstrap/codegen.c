@@ -73,11 +73,21 @@ static void codegen_node(struct node *proc, struct node *node, FILE *file) {
 		break;
 	}
 
-	case node_kind_return:
-		codegen_node(proc, node->kids->next, file);
-		fprintf(file, "\tmov x0, x9\n");
+	case node_kind_expr_stmt: {
+		struct node *expr = node->kids->next;
+		codegen_node(proc, expr, file);
+		break;
+	}
+
+	case node_kind_return: {
+		struct node *return_value = node->kids->next;
+		if (!node_is_nil(return_value)) {
+			codegen_node(proc, return_value, file);
+			fprintf(file, "\tmov x0, x9\n");
+		}
 		fprintf(file, "\tb .L.%s.return\n", proc->name);
 		break;
+	}
 
 	case node_kind_block:
 		for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {

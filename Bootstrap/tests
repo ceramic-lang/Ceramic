@@ -88,6 +88,8 @@ expect_equal "proc main() int { n: int; n = n * 5 + 3; return n; }" "3"
 expect_equal "proc main() int { i := 50; return i; }" "50"
 expect_equal "proc main() int { i: int; p := *i; p^ = 92; return i; }" "92"
 expect_equal "proc main() int { return a(); } proc a() int { return 5; }" "5"
+expect_equal "proc main() int { p(); return 2; } proc p() {}" "2"
+expect_equal "proc main() int { p(); return 2; } proc p() { return; }" "2"
 
 expect_error "proc main() int { return 0 }" "1: expected “;”, found “}”"
 expect_error "\`" "1: invalid token “\`”"
@@ -127,5 +129,21 @@ proc main() int {
 	return foo()
 }" "3: unknown procedure “foo”"
 expect_error "proc main() int { x:; }" "1: expected expression"
+expect_error "proc main() { return 0; }" "1: cannot return value from procedure with no return value"
+expect_error "proc main() int { return; }" "1: missing return value"
+expect_error "
+proc main() int {
+	x := p()
+}
+proc p() {}" "3: cannot initialize variable using expression without value"
+expect_error "
+proc main() int {
+	p() + 1
+}
+proc p() {}" "3: expected “int” but found “non-value”"
+expect_error "proc main() int { 1; }" "1: unused expression"
+expect_error "
+proc main() int { one(); }
+proc one() int { return 1; }" "2: unused expression"
 
 rm "$asm_path" "$executable_path"
