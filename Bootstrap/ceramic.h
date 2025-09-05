@@ -76,8 +76,8 @@ struct local {
 
 struct node {
 	struct node *next;
-	struct node *prev;
-	struct node *kids;
+	struct node *first;
+	struct node *last;
 	enum node_kind kind;
 	char *name;
 	uint64_t value;
@@ -90,8 +90,8 @@ struct node {
 
 static const struct node node_nil = {
         .next = (struct node *)&node_nil,
-        .prev = (struct node *)&node_nil,
-        .kids = (struct node *)&node_nil,
+        .first = (struct node *)&node_nil,
+        .last = (struct node *)&node_nil,
 };
 
 static bool node_is_nil(struct node *node);

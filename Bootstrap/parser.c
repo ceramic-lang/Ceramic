@@ -178,7 +178,7 @@ static struct tokens lex(char *s) {
 }
 
 static bool node_is_nil(struct node *node) {
-	bool result = node == 0 || node->kind == 0;
+	bool result = node->kind == 0;
 	return result;
 }
 
@@ -186,22 +186,24 @@ static struct node *node_create(enum node_kind kind, struct token *token) {
 	struct node *node = calloc(1, sizeof(struct node));
 	node->kind = kind;
 	node->line = token ? token->line : 1;
-	node->kids = calloc(1, sizeof(struct node));
-	node->kids->next = node->kids;
-	node->kids->prev = node->kids;
+	node->next = (struct node *)&node_nil;
+	node->first = (struct node *)&node_nil;
+	node->last = (struct node *)&node_nil;
 	return node;
 }
 
 static void node_add_kid(struct node *node, struct node *kid) {
-	kid->prev = node->kids->prev;
-	kid->next = node->kids;
-	kid->prev->next = kid;
-	kid->next->prev = kid;
+	if (node_is_nil(node->first)) {
+		node->first = kid;
+	} else {
+		node->last->next = kid;
+	}
+	node->last = kid;
 }
 
 static struct node *node_find(struct node *node, enum node_kind kind) {
 	struct node *result = (struct node *)&node_nil;
-	for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
+	for (struct node *kid = node->first; !node_is_nil(kid); kid = kid->next) {
 		if (kid->kind == kind) {
 			result = kid;
 			break;
@@ -212,7 +214,7 @@ static struct node *node_find(struct node *node, enum node_kind kind) {
 
 static size_t node_kid_count(struct node *node) {
 	size_t count = 0;
-	for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
+	for (struct node *kid = node->first; !node_is_nil(kid); kid = kid->next) {
 		count++;
 	}
 	return count;
@@ -225,7 +227,7 @@ static void node_print_with_indentation(struct node *node, size_t indentation) {
 	if (node->name) fprintf(stderr, " (%s)", node->name);
 	fprintf(stderr, " (%llu)\n", node->value);
 
-	for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
+	for (struct node *kid = node->first; !node_is_nil(kid); kid = kid->next) {
 		node_print_with_indentation(kid, indentation + 1);
 	}
 }

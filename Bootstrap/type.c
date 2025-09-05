@@ -73,7 +73,7 @@ static struct type *type_from_expr(struct node *expr) {
 		error(expr->line, "unknown type “%s”", expr->name);
 
 	case node_kind_address:
-		return type_pointer(type_from_expr(expr->kids->next));
+		return type_pointer(type_from_expr(expr->first));
 
 	case node_kind_proc_type: {
 		struct node *params_expr = node_find(expr, node_kind_params);
@@ -81,7 +81,7 @@ static struct type *type_from_expr(struct node *expr) {
 		struct type_node *first_param = 0;
 		struct type_node *last_param = 0;
 
-		for (struct node *param_expr = params_expr->kids->next; !node_is_nil(param_expr);
+		for (struct node *param_expr = params_expr->first; !node_is_nil(param_expr);
 		        param_expr = param_expr->next) {
 			struct type_node *param = calloc(1, sizeof(struct type_node));
 			param->type = type_from_expr(param_expr);
@@ -94,7 +94,7 @@ static struct type *type_from_expr(struct node *expr) {
 			last_param = param;
 		}
 
-		struct node *return_type_expr = node_find(expr, node_kind_type)->kids->next;
+		struct node *return_type_expr = node_find(expr, node_kind_type)->first;
 		return type_proc(first_param, type_from_expr(return_type_expr));
 	}
 
@@ -184,14 +184,14 @@ static void check_node(struct entity *proc, struct node *node) {
 		break;
 
 	case node_kind_local: {
-		struct node *type_expr = node_find(node, node_kind_type)->kids->next;
+		struct node *type_expr = node_find(node, node_kind_type)->first;
 		struct node *initializer = node_find(node, node_kind_initializer);
 
 		struct type *type = 0;
 		if (node_is_nil(initializer)) {
 			type = type_from_expr(type_expr);
 		} else {
-			struct node *initializer_expr = initializer->kids->next;
+			struct node *initializer_expr = initializer->first;
 			check_node(proc, initializer_expr);
 
 			if (!initializer_expr->type) {
@@ -258,7 +258,7 @@ static void check_node(struct entity *proc, struct node *node) {
 	}
 
 	case node_kind_assign: {
-		struct node *lhs = node->kids->next;
+		struct node *lhs = node->first;
 		struct node *rhs = lhs->next;
 		check_node(proc, lhs);
 		check_node(proc, rhs);
@@ -267,14 +267,14 @@ static void check_node(struct entity *proc, struct node *node) {
 	}
 
 	case node_kind_expr_stmt: {
-		struct node *expr = node->kids->next;
+		struct node *expr = node->first;
 		check_node(proc, expr);
 		if (expr->type) error(expr->line, "unused expression");
 		break;
 	}
 
 	case node_kind_return: {
-		struct node *return_value = node->kids->next;
+		struct node *return_value = node->first;
 		if (node_is_nil(return_value)) {
 			if (proc->return_type) {
 				error(node->line, "missing return value");
@@ -290,14 +290,14 @@ static void check_node(struct entity *proc, struct node *node) {
 	}
 
 	case node_kind_address: {
-		struct node *operand = node->kids->next;
+		struct node *operand = node->first;
 		check_node(proc, operand);
 		node->type = type_pointer(operand->type);
 		break;
 	}
 
 	case node_kind_deref: {
-		struct node *operand = node->kids->next;
+		struct node *operand = node->first;
 		check_node(proc, operand);
 		if (operand->type->kind != type_kind_pointer) {
 			error(node->line, "can’t dereference non-pointer type “%s”", type_print(operand->type));
@@ -307,14 +307,14 @@ static void check_node(struct entity *proc, struct node *node) {
 	}
 
 	case node_kind_call: {
-		struct node *callee = node->kids->next;
+		struct node *callee = node->first;
 		check_node(proc, callee);
 
 		if (callee->type->kind != type_kind_proc) {
 			error(node->line, "cannot call value of non-procedure type “%s”", type_print(callee->type));
 		}
 
-		struct node *args = node->kids->next->next;
+		struct node *args = node->first->next;
 		size_t arg_count = node_kid_count(node) - 1;
 
 		size_t param_count = 0;
@@ -343,7 +343,7 @@ static void check_node(struct entity *proc, struct node *node) {
 	case node_kind_sub:
 	case node_kind_mul:
 	case node_kind_div: {
-		struct node *lhs = node->kids->next;
+		struct node *lhs = node->first;
 		struct node *rhs = lhs->next;
 		check_node(proc, lhs);
 		check_node(proc, rhs);
@@ -354,7 +354,7 @@ static void check_node(struct entity *proc, struct node *node) {
 	}
 
 	case node_kind_block:
-		for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
+		for (struct node *kid = node->first; !node_is_nil(kid); kid = kid->next) {
 			check_node(proc, kid);
 		}
 		break;
@@ -378,7 +378,7 @@ static struct entity *typecheck(struct node *root) {
 	g_first_entity = 0;
 	struct entity *last_entity = 0;
 
-	for (struct node *node = root->kids->next; !node_is_nil(node); node = node->next) {
+	for (struct node *node = root->first; !node_is_nil(node); node = node->next) {
 		assert(node->kind == node_kind_proc);
 
 		struct entity *entity = calloc(1, sizeof(struct entity));
@@ -390,10 +390,10 @@ static struct entity *typecheck(struct node *root) {
 		struct param *last_param = 0;
 
 		struct node *params = node_find(node, node_kind_params);
-		for (struct node *kid = params->kids->next; !node_is_nil(kid); kid = kid->next) {
+		for (struct node *kid = params->first; !node_is_nil(kid); kid = kid->next) {
 			struct param *param = calloc(1, sizeof(struct param));
 			param->name = kid->name;
-			param->type = type_from_expr(kid->kids->next);
+			param->type = type_from_expr(kid->first);
 			param->local = add_local(entity, param->name, param->type);
 
 			if (first_param) {
@@ -410,7 +410,7 @@ static struct entity *typecheck(struct node *root) {
 
 		struct node *return_type = node_find(node, node_kind_type);
 		if (return_type) {
-			entity->return_type = type_from_expr(return_type->kids->next);
+			entity->return_type = type_from_expr(return_type->first);
 		}
 
 		if (g_first_entity) {

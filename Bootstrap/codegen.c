@@ -16,17 +16,17 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 		break;
 
 	case node_kind_address:
-		codegen_node_address(proc, node->kids->next, file);
+		codegen_node_address(proc, node->first, file);
 		break;
 
 	case node_kind_deref:
-		codegen_node(proc, node->kids->next, file);
+		codegen_node(proc, node->first, file);
 		fprintf(file, "\tldr x9, [x9]\n");
 		break;
 
 	case node_kind_call: {
 		int arg_count = 0;
-		for (struct node *arg = node->kids->next->next; !node_is_nil(arg); arg = arg->next) {
+		for (struct node *arg = node->first->next; !node_is_nil(arg); arg = arg->next) {
 			codegen_node(proc, arg, file);
 			fprintf(file, "\tstr x9, [sp, #-16]!\n");
 			arg_count++;
@@ -36,7 +36,7 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 			fprintf(file, "\tldr x%d, [sp], #16\n", reg);
 		}
 
-		struct node *callee = node->kids->next;
+		struct node *callee = node->first;
 		codegen_node(proc, callee, file);
 		fprintf(file, "\tblr x9\n");
 		break;
@@ -46,9 +46,9 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 	case node_kind_sub:
 	case node_kind_mul:
 	case node_kind_div:
-		codegen_node(proc, node->kids->next, file);
+		codegen_node(proc, node->first, file);
 		fprintf(file, "\tstr x9, [sp, #-16]!\n");
-		codegen_node(proc, node->kids->next->next, file);
+		codegen_node(proc, node->first->next, file);
 		fprintf(file, "\tldr x10, [sp], #16\n");
 		switch (node->kind) {
 		case node_kind_add:
@@ -73,14 +73,14 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 		if (node_is_nil(initializer)) {
 			fprintf(file, "\tmov x9, #0\n");
 		} else {
-			codegen_node(proc, initializer->kids->next, file);
+			codegen_node(proc, initializer->first, file);
 		}
 		fprintf(file, "\tstr x9, [x29, #-%zu]\n", node->local->offset);
 		break;
 	}
 
 	case node_kind_assign: {
-		struct node *lhs = node->kids->next;
+		struct node *lhs = node->first;
 		struct node *rhs = lhs->next;
 		codegen_node_address(proc, lhs, file);
 		fprintf(file, "\tstr x9, [sp, #-16]!\n");
@@ -91,13 +91,13 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 	}
 
 	case node_kind_expr_stmt: {
-		struct node *expr = node->kids->next;
+		struct node *expr = node->first;
 		codegen_node(proc, expr, file);
 		break;
 	}
 
 	case node_kind_return: {
-		struct node *return_value = node->kids->next;
+		struct node *return_value = node->first;
 		if (!node_is_nil(return_value)) {
 			codegen_node(proc, return_value, file);
 			fprintf(file, "\tmov x0, x9\n");
@@ -107,7 +107,7 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 	}
 
 	case node_kind_block:
-		for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
+		for (struct node *kid = node->first; !node_is_nil(kid); kid = kid->next) {
 			codegen_node(proc, kid, file);
 		}
 		break;
@@ -136,7 +136,7 @@ static void codegen_node_address(struct entity *proc, struct node *node, FILE *f
 		break;
 
 	case node_kind_deref:
-		codegen_node(proc, node->kids->next, file);
+		codegen_node(proc, node->first, file);
 		break;
 
 	default:
