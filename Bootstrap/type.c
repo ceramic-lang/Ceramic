@@ -1,3 +1,12 @@
+static void type_list_push(struct type_node **first, struct type_node **last, struct type_node *node) {
+	if (*first) {
+		(*last)->next = node;
+	} else {
+		*first = node;
+	}
+	*last = node;
+}
+
 static struct type *interned_types_first;
 static struct type *interned_types_last;
 
@@ -85,13 +94,7 @@ static struct type *type_from_expr(struct node *expr) {
 		        param_expr = param_expr->next) {
 			struct type_node *param = calloc(1, sizeof(struct type_node));
 			param->type = type_from_expr(param_expr);
-
-			if (first_param) {
-				last_param->next = param;
-			} else {
-				first_param = param;
-			}
-			last_param = param;
+			type_list_push(&first_param, &last_param, param);
 		}
 
 		struct node *return_type_expr = node_find(expr, node_kind_type)->first;
@@ -235,12 +238,7 @@ static void check_node(struct entity *proc, struct node *node) {
 					for (struct param *param = entity->first_param; param; param = param->next) {
 						struct type_node *param_node = calloc(1, sizeof(struct type_node));
 						param_node->type = param->type;
-						if (first_param) {
-							last_param->next = param_node;
-						} else {
-							first_param = param_node;
-						}
-						last_param = param_node;
+						type_list_push(&first_param, &last_param, param_node);
 					}
 
 					node->type = type_proc(first_param, entity->return_type);

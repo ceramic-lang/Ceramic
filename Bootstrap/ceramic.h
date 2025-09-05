@@ -126,6 +126,7 @@ struct entity {
 	size_t locals_size;
 };
 
+static void type_list_push(struct type_node **first, struct type_node **last, struct type_node *node);
 static struct entity *typecheck(struct node *root);
 
 static void codegen(struct entity *first_entity, FILE *file);
