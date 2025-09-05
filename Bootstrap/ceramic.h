@@ -42,6 +42,7 @@ static char *const node_kind_strings[] = {
         [node_kind_block] = "block",
         [node_kind_address] = "address",
         [node_kind_deref] = "deref",
+        [node_kind_call] = "call",
         [node_kind_name] = "name",
         [node_kind_number] = "number",
         [node_kind_add] = "add",
