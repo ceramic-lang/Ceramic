@@ -107,6 +107,60 @@ proc main() int {
 proc inc(p: *int) {
 	p^ = p^ + 1
 }" "7"
+expect_equal "
+proc main() int {
+	x := 9
+	y := 2
+	p := add
+	result := p(x, y)
+	p = mul
+	result = result + p(x, y)
+	return result
+}
+
+proc add(x: int, y: int) int { return x + y; }
+proc mul(x: int, y: int) int { return x * y; }" "29"
+expect_equal "
+proc main() int {
+	return apply(4, inc)
+}
+
+proc inc(x: int) int {
+	return x + 1
+}
+
+proc apply(value: int, procedure: proc(int) int) int {
+	return procedure(value)
+}" "5"
+expect_equal "
+proc main() int {
+	p: proc(*int)
+	pp := *p
+	populate(pp)
+	n := 7
+	pp^(*n)
+	return n
+}
+
+proc populate(pp: *proc(*int)) {
+	pp^ = frob
+}
+
+proc frob(n: *int) {
+	n^ = n^ + 6
+}" "13"
+expect_equal "
+proc main() int {
+	n := 100
+	p1: proc(*int)
+	p2: proc(*int)
+	p1 = inc
+	p2 = p1
+	p2(*n)
+	return n
+}
+proc inc(n: *int) { n^ = n^ + 1; }
+proc dec(n: *int) { n^ = n^ - 1; }" "101"
 
 expect_error "proc main() int { return 0 }" "1: expected “;”, found “}”"
 expect_error "\`" "1: invalid token “\`”"
@@ -117,7 +171,7 @@ expect_error ":" "1: expected procedure"
 expect_error "
 proc main() int {
 	return foo
-}" "3: unknown variable “foo”"
+}" "3: unknown name “foo”"
 expect_error "proc main() int { 1 = 2; }" "1: expression doesn’t have an address"
 expect_error "proc main() int { x: *int = *5; }" "1: expression doesn’t have an address"
 expect_error "proc main() int { x: int; x = *x; }" "1: expected “int” but found “*int”"
@@ -130,7 +184,7 @@ expect_error "
 proc main() int {
 	x: 5
 }" "3: cannot use non-type expression as type"
-expect_error "proc main() int { x: int = x; }" "1: unknown variable “x”"
+expect_error "proc main() int { x: int = x; }" "1: unknown name “x”"
 expect_error "
 proc main() int {
 	i: int
@@ -144,7 +198,7 @@ proc main() int {
 expect_error "
 proc main() int {
 	return foo()
-}" "3: unknown procedure “foo”"
+}" "3: unknown name “foo”"
 expect_error "proc main() int { x:; }" "1: expected expression"
 expect_error "proc main() { return 0; }" "1: cannot return value from procedure with no return value"
 expect_error "proc main() int { return; }" "1: missing return value"
@@ -167,5 +221,13 @@ expect_error "
 proc main() int { p(); }
 proc p(x: int, y: int, z: int) {}" "2: expected 3 arguments but found 0"
 expect_error "proc main() int { p(1); } proc p(x: *int) {}" "1: expected “*int” but found “int”"
+expect_error "
+proc main() int { p: proc() = a; }
+proc a() int { return 0; }" "2: expected “proc()” but found “proc() int”"
+expect_error "
+proc main() int { p: proc(*int) = a; }
+proc a() int { return 0; }" "2: expected “proc(*int)” but found “proc() int”"
+expect_error "proc main() { p := *main; }" "1: cannot take address of procedure"
+expect_error "proc main() { 1(); }" "1: cannot call value of non-procedure type “int”"
 
 rm "$asm_path" "$executable_path"

@@ -289,8 +289,16 @@ static struct token *expect(struct parser *p, enum token_kind kind) {
 
 static struct node *parse_expr(struct parser *p);
 
+static const enum token_kind expr_first = (1 << token_kind_number) | (1 << token_kind_name) |
+                                          (1 << token_kind_asterisk) | (1 << token_kind_proc) |
+                                          (1 << token_kind_lparen);
+
 static struct node *parse_lhs(struct parser *p) {
 	struct node *result = 0;
+
+	if (((1 << current(p)) & expr_first) == 0) {
+		error(p->token->line, "expected expression");
+	}
 
 	switch (current(p)) {
 	case token_kind_number: {
@@ -315,6 +323,31 @@ static struct node *parse_lhs(struct parser *p) {
 		break;
 	}
 
+	case token_kind_proc: {
+		struct token *token = bump(p, token_kind_proc);
+		result = node_create(node_kind_proc_type, token);
+
+		struct token *lparen = expect(p, token_kind_lparen);
+		struct node *params = node_create(node_kind_params, lparen);
+		node_add_kid(result, params);
+		while (!at(p, token_kind_rparen)) {
+			struct node *param = parse_expr(p);
+			node_add_kid(params, param);
+			if (!at(p, token_kind_rparen)) expect(p, token_kind_comma);
+		}
+		expect(p, token_kind_rparen);
+
+		if ((1 << current(p)) & expr_first) {
+			struct token *t = p->token;
+			struct node *return_type_expr = parse_expr(p);
+			struct node *return_type = node_create(node_kind_return_type, t);
+			node_add_kid(result, return_type);
+			node_add_kid(return_type, return_type_expr);
+		}
+
+		break;
+	}
+
 	case token_kind_lparen: {
 		bump(p, token_kind_lparen);
 		result = parse_expr(p);
@@ -323,7 +356,7 @@ static struct node *parse_lhs(struct parser *p) {
 	}
 
 	default:
-		error(p->token->line, "expected expression");
+		unreachable();
 	}
 
 	while (true) {

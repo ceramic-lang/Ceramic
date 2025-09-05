@@ -3,7 +3,12 @@ static void codegen_node_address(struct entity *proc, struct node *node, FILE *f
 static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 	switch (node->kind) {
 	case node_kind_name:
-		fprintf(file, "\tldr x9, [x29, #-%zu]\n", node->local->offset);
+		if (node->local) {
+			fprintf(file, "\tldr x9, [x29, #-%zu]\n", node->local->offset);
+		} else {
+			fprintf(file, "\tadrp x9, _%s@PAGE\n", node->entity->name);
+			fprintf(file, "\tadd x9, x9, _%s@PAGEOFF\n", node->entity->name);
+		}
 		break;
 
 	case node_kind_number:
@@ -31,8 +36,9 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 			fprintf(file, "\tldr x%d, [sp], #16\n", reg);
 		}
 
-		char *called_proc_name = node->kids->next->name;
-		fprintf(file, "\tbl _%s\n", called_proc_name);
+		struct node *callee = node->kids->next;
+		codegen_node(proc, callee, file);
+		fprintf(file, "\tblr x9\n");
 		break;
 	}
 
@@ -109,7 +115,10 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 	case node_kind_nil:
 	case node_kind_root:
 	case node_kind_proc:
+	case node_kind_proc_type:
 	case node_kind_param:
+	case node_kind_params:
+	case node_kind_return_type:
 	case node_kind_initializer:
 	case node_kind_type:
 	case node_kind__last:
@@ -120,7 +129,11 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 static void codegen_node_address(struct entity *proc, struct node *node, FILE *file) {
 	switch (node->kind) {
 	case node_kind_name:
-		fprintf(file, "\tsub x9, x29, #%zu\n", node->local->offset);
+		if (node->local) {
+			fprintf(file, "\tsub x9, x29, #%zu\n", node->local->offset);
+		} else {
+			error(node->line, "cannot take address of procedure");
+		}
 		break;
 
 	case node_kind_deref:

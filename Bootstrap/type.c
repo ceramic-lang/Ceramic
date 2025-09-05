@@ -1,28 +1,69 @@
-static struct type *first_type;
+static struct type *interned_types_first;
+static struct type *interned_types_last;
 
-static struct type *type_int(void) {
-	for (struct type *type = first_type; type; type = type->next) {
-		if (type->kind == type_kind_int) return type;
+static struct type *type_intern(enum type_kind kind, struct type *inner, struct type_node *first) {
+	struct type *result = 0;
+
+	for (struct type *type = interned_types_first; type; type = type->next_interned) {
+		if (type->kind == kind && type->inner == inner) {
+			bool match = true;
+
+			struct type_node *n1 = first;
+			struct type_node *n2 = type->first;
+
+			while (true) {
+				bool n1_exists = n1;
+				bool n2_exists = n2;
+				if (n1_exists != n2_exists) {
+					match = false;
+					break;
+				}
+
+				if (!n1 || !n2) break;
+
+				if (n1->type != n2->type) {
+					match = false;
+					break;
+				}
+
+				n1 = n1->next;
+				n2 = n2->next;
+			}
+
+			if (match) {
+				result = type;
+				break;
+			}
+		}
 	}
 
-	struct type *type = calloc(1, sizeof(struct type));
-	type->kind = type_kind_int;
-	type->next = first_type;
-	first_type = type;
-	return type;
+	if (!result) {
+		result = calloc(1, sizeof(struct type));
+		result->kind = kind;
+		result->inner = inner;
+		result->first = first;
+
+		if (interned_types_first) {
+			interned_types_last->next_interned = result;
+		} else {
+			interned_types_first = result;
+		}
+		interned_types_last = result;
+	}
+
+	return result;
+}
+
+static struct type *type_int(void) {
+	return type_intern(type_kind_int, 0, 0);
 }
 
 static struct type *type_pointer(struct type *pointee) {
-	for (struct type *type = first_type; type; type = type->next) {
-		if (type->kind == type_kind_pointer && type->inner == pointee) return type;
-	}
+	return type_intern(type_kind_pointer, pointee, 0);
+}
 
-	struct type *type = calloc(1, sizeof(struct type));
-	type->kind = type_kind_pointer;
-	type->inner = pointee;
-	type->next = first_type;
-	first_type = type;
-	return type;
+static struct type *type_proc(struct type_node *first_param, struct type *return_type) {
+	return type_intern(type_kind_proc, return_type, first_param);
 }
 
 static struct type *type_from_expr(struct node *expr) {
@@ -34,6 +75,29 @@ static struct type *type_from_expr(struct node *expr) {
 	case node_kind_address:
 		return type_pointer(type_from_expr(expr->kids->next));
 
+	case node_kind_proc_type: {
+		struct node *params_expr = node_find(expr, node_kind_params);
+
+		struct type_node *first_param = 0;
+		struct type_node *last_param = 0;
+
+		for (struct node *param_expr = params_expr->kids->next; !node_is_nil(param_expr);
+		        param_expr = param_expr->next) {
+			struct type_node *param = calloc(1, sizeof(struct type_node));
+			param->type = type_from_expr(param_expr);
+
+			if (first_param) {
+				last_param->next = param;
+			} else {
+				first_param = param;
+			}
+			last_param = param;
+		}
+
+		struct node *return_type_expr = node_find(expr, node_kind_return_type)->kids->next;
+		return type_proc(first_param, type_from_expr(return_type_expr));
+	}
+
 	case node_kind_nil:
 		return 0;
 
@@ -42,19 +106,54 @@ static struct type *type_from_expr(struct node *expr) {
 	}
 }
 
+struct buf {
+	char *s;
+	size_t capacity;
+	size_t length;
+};
+
+static struct buf buf_make(void) {
+	struct buf result = {0};
+	result.capacity = 128;
+	result.s = calloc(result.capacity, sizeof(char));
+	return result;
+}
+
+__attribute__((format(printf, 2, 3))) static void buf_printf(struct buf *buf, char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	size_t remaining = buf->capacity - buf->length;
+	int wanted = vsnprintf(buf->s + buf->length, remaining, fmt, ap);
+	assert(wanted >= 0);
+	buf->length += (size_t)wanted > remaining ? remaining : (size_t)wanted;
+	va_end(ap);
+}
+
 static char *type_print(struct type *type) {
 	if (!type) return "non-value";
+	struct buf buf = buf_make();
 
-	char *result = 0;
 	switch (type->kind) {
 	case type_kind_int:
-		result = "int";
+		buf_printf(&buf, "int");
 		break;
+
 	case type_kind_pointer:
-		asprintf(&result, "*%s", type_print(type->inner));
+		buf_printf(&buf, "*%s", type_print(type->inner));
+		break;
+
+	case type_kind_proc:
+		buf_printf(&buf, "proc(");
+		for (struct type_node *param = type->first; param; param = param->next) {
+			buf_printf(&buf, "%s", type_print(param->type));
+			if (param->next) buf_printf(&buf, ", ");
+		}
+		buf_printf(&buf, ")");
+		if (type->inner) buf_printf(&buf, " %s", type_print(type->inner));
 		break;
 	}
-	return result;
+
+	return buf.s;
 }
 
 static void expect_types_equal(struct type *expected, struct type *actual, size_t line) {
@@ -112,20 +211,51 @@ static void check_node(struct entity *proc, struct node *node) {
 		break;
 	}
 
-	case node_kind_name:
+	case node_kind_name: {
+		bool found_match = false;
+
 		for (struct local *local = proc->first_local; local; local = local->next) {
 			if (strcmp(local->name, node->name) == 0) {
 				node->local = local;
+				node->type = node->local->type;
+				found_match = true;
 				break;
 			}
 		}
 
-		if (!node->local) {
-			error(node->line, "unknown variable “%s”", node->name);
+		if (!found_match) {
+			for (struct entity *entity = g_first_entity; entity; entity = entity->next) {
+				assert(entity->kind == entity_kind_proc);
+				if (strcmp(entity->name, node->name) == 0) {
+					node->entity = entity;
+
+					struct type_node *first_param = 0;
+					struct type_node *last_param = 0;
+
+					for (struct param *param = entity->first_param; param; param = param->next) {
+						struct type_node *param_node = calloc(1, sizeof(struct type_node));
+						param_node->type = param->type;
+						if (first_param) {
+							last_param->next = param_node;
+						} else {
+							first_param = param_node;
+						}
+						last_param = param_node;
+					}
+
+					node->type = type_proc(first_param, entity->return_type);
+					found_match = true;
+					break;
+				}
+			}
 		}
 
-		node->type = node->local->type;
+		if (!found_match) {
+			error(node->line, "unknown name “%s”", node->name);
+		}
+
 		break;
+	}
 
 	case node_kind_assign: {
 		struct node *lhs = node->kids->next;
@@ -177,28 +307,27 @@ static void check_node(struct entity *proc, struct node *node) {
 	}
 
 	case node_kind_call: {
-		char *name = node->kids->next->name;
-		struct entity *match = 0;
+		struct node *callee = node->kids->next;
+		check_node(proc, callee);
 
-		for (struct entity *candidate = g_first_entity; candidate; candidate = candidate->next) {
-			if (candidate->kind == entity_kind_proc && strcmp(candidate->name, name) == 0) {
-				match = candidate;
-				break;
-			}
+		if (callee->type->kind != type_kind_proc) {
+			error(node->line, "cannot call value of non-procedure type “%s”", type_print(callee->type));
 		}
 
-		if (!match) {
-			error(node->line, "unknown procedure “%s”", name);
-		}
-
+		struct node *args = node->kids->next->next;
 		size_t arg_count = node_kid_count(node) - 1;
-		size_t param_count = match->param_count;
+
+		size_t param_count = 0;
+		for (struct type_node *param = callee->type->first; param; param = param->next) {
+			param_count++;
+		}
+
 		if (arg_count != param_count) {
 			error(node->line, "expected %zu arguments but found %zu", param_count, arg_count);
 		}
 
-		struct node *arg = node->kids->next->next;
-		struct param *param = match->first_param;
+		struct node *arg = args;
+		struct type_node *param = callee->type->first;
 		while (!node_is_nil(arg) && param) {
 			check_node(proc, arg);
 			expect_types_equal(param->type, arg->type, arg->line);
@@ -206,7 +335,7 @@ static void check_node(struct entity *proc, struct node *node) {
 			param = param->next;
 		}
 
-		node->type = match->return_type;
+		node->type = callee->type->inner;
 		break;
 	}
 
@@ -233,7 +362,10 @@ static void check_node(struct entity *proc, struct node *node) {
 	case node_kind_nil:
 	case node_kind_root:
 	case node_kind_proc:
+	case node_kind_proc_type:
 	case node_kind_param:
+	case node_kind_params:
+	case node_kind_return_type:
 	case node_kind_initializer:
 	case node_kind_type:
 	case node_kind__last:

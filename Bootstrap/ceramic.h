@@ -2,7 +2,10 @@ enum node_kind {
 	node_kind_nil,
 	node_kind_root,
 	node_kind_proc,
+	node_kind_proc_type,
 	node_kind_param,
+	node_kind_params,
+	node_kind_return_type,
 	node_kind_local,
 	node_kind_type,
 	node_kind_initializer,
@@ -26,7 +29,10 @@ static char *const node_kind_strings[] = {
         [node_kind_nil] = "nil",
         [node_kind_root] = "root",
         [node_kind_proc] = "proc",
+        [node_kind_proc_type] = "proc_type",
         [node_kind_param] = "param",
+        [node_kind_params] = "params",
+        [node_kind_return_type] = "return_type",
         [node_kind_local] = "local",
         [node_kind_type] = "type",
         [node_kind_initializer] = "initializer",
@@ -47,12 +53,19 @@ static char *const node_kind_strings[] = {
 enum type_kind {
 	type_kind_int,
 	type_kind_pointer,
+	type_kind_proc,
+};
+
+struct type_node {
+	struct type_node *next;
+	struct type *type;
 };
 
 struct type {
-	struct type *next;
+	struct type *next_interned;
 	enum type_kind kind;
 	struct type *inner;
+	struct type_node *first;
 };
 
 struct local {
@@ -73,6 +86,7 @@ struct node {
 
 	struct type *type;
 	struct local *local;
+	struct entity *entity;
 };
 
 static const struct node node_nil = {
