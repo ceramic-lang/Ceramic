@@ -94,7 +94,7 @@ static struct type *type_from_expr(struct node *expr) {
 			last_param = param;
 		}
 
-		struct node *return_type_expr = node_find(expr, node_kind_return_type)->kids->next;
+		struct node *return_type_expr = node_find(expr, node_kind_type)->kids->next;
 		return type_proc(first_param, type_from_expr(return_type_expr));
 	}
 
@@ -365,7 +365,6 @@ static void check_node(struct entity *proc, struct node *node) {
 	case node_kind_proc_type:
 	case node_kind_param:
 	case node_kind_params:
-	case node_kind_return_type:
 	case node_kind_initializer:
 	case node_kind_type:
 	case node_kind__last:
@@ -390,21 +389,20 @@ static struct entity *typecheck(struct node *root) {
 		struct param *first_param = 0;
 		struct param *last_param = 0;
 
-		for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
-			if (kid->kind == node_kind_param) {
-				struct param *param = calloc(1, sizeof(struct param));
-				param->name = kid->name;
-				param->type = type_from_expr(kid->kids->next);
-				param->local = add_local(entity, param->name, param->type);
+		struct node *params = node_find(node, node_kind_params);
+		for (struct node *kid = params->kids->next; !node_is_nil(kid); kid = kid->next) {
+			struct param *param = calloc(1, sizeof(struct param));
+			param->name = kid->name;
+			param->type = type_from_expr(kid->kids->next);
+			param->local = add_local(entity, param->name, param->type);
 
-				if (first_param) {
-					last_param->next = param;
-				} else {
-					first_param = param;
-				}
-				last_param = param;
-				entity->param_count++;
+			if (first_param) {
+				last_param->next = param;
+			} else {
+				first_param = param;
 			}
+			last_param = param;
+			entity->param_count++;
 		}
 
 		entity->first_param = first_param;

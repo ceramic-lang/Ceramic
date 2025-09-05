@@ -340,7 +340,7 @@ static struct node *parse_lhs(struct parser *p) {
 		if ((1 << current(p)) & expr_first) {
 			struct token *t = p->token;
 			struct node *return_type_expr = parse_expr(p);
-			struct node *return_type = node_create(node_kind_return_type, t);
+			struct node *return_type = node_create(node_kind_type, t);
 			node_add_kid(result, return_type);
 			node_add_kid(return_type, return_type_expr);
 		}
@@ -508,7 +508,9 @@ static struct node *parse_proc(struct parser *p) {
 	struct node *proc = node_create(node_kind_proc, proc_token);
 	proc->name = name_token->string;
 
-	expect(p, token_kind_lparen);
+	struct token *lparen_token = expect(p, token_kind_lparen);
+	struct node *params = node_create(node_kind_params, lparen_token);
+	node_add_kid(proc, params);
 
 	while (!at(p, token_kind_rparen)) {
 		struct token *param_name = expect(p, token_kind_name);
@@ -517,7 +519,7 @@ static struct node *parse_proc(struct parser *p) {
 		expect(p, token_kind_colon);
 		struct node *type_expr = parse_expr(p);
 		node_add_kid(param, type_expr);
-		node_add_kid(proc, param);
+		node_add_kid(params, param);
 
 		if (!at(p, token_kind_rparen)) expect(p, token_kind_comma);
 	}

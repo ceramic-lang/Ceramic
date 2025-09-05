@@ -118,7 +118,6 @@ static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 	case node_kind_proc_type:
 	case node_kind_param:
 	case node_kind_params:
-	case node_kind_return_type:
 	case node_kind_initializer:
 	case node_kind_type:
 	case node_kind__last:
