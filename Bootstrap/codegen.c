@@ -1,6 +1,6 @@
-static void codegen_node_address(struct node *proc, struct node *node, FILE *file);
+static void codegen_node_address(struct entity *proc, struct node *node, FILE *file);
 
-static void codegen_node(struct node *proc, struct node *node, FILE *file) {
+static void codegen_node(struct entity *proc, struct node *node, FILE *file) {
 	switch (node->kind) {
 	case node_kind_name:
 		fprintf(file, "\tldr x9, [x29, #-%zu]\n", node->local->offset);
@@ -20,7 +20,18 @@ static void codegen_node(struct node *proc, struct node *node, FILE *file) {
 		break;
 
 	case node_kind_call: {
-		char *called_proc_name = node_find(node, node_kind_name)->name;
+		int arg_count = 0;
+		for (struct node *arg = node->kids->next->next; !node_is_nil(arg); arg = arg->next) {
+			codegen_node(proc, arg, file);
+			fprintf(file, "\tstr x9, [sp, #-16]!\n");
+			arg_count++;
+		}
+
+		for (int reg = arg_count - 1; reg >= 0; reg--) {
+			fprintf(file, "\tldr x%d, [sp], #16\n", reg);
+		}
+
+		char *called_proc_name = node->kids->next->name;
 		fprintf(file, "\tbl _%s\n", called_proc_name);
 		break;
 	}
@@ -98,6 +109,7 @@ static void codegen_node(struct node *proc, struct node *node, FILE *file) {
 	case node_kind_nil:
 	case node_kind_root:
 	case node_kind_proc:
+	case node_kind_param:
 	case node_kind_initializer:
 	case node_kind_type:
 	case node_kind__last:
@@ -105,7 +117,7 @@ static void codegen_node(struct node *proc, struct node *node, FILE *file) {
 	}
 }
 
-static void codegen_node_address(struct node *proc, struct node *node, FILE *file) {
+static void codegen_node_address(struct entity *proc, struct node *node, FILE *file) {
 	switch (node->kind) {
 	case node_kind_name:
 		fprintf(file, "\tsub x9, x29, #%zu\n", node->local->offset);
@@ -129,11 +141,9 @@ static size_t round_up(size_t n, size_t m) {
 	return result;
 }
 
-static void codegen(struct node *root, FILE *file) {
-	assert(root->kind == node_kind_root);
-
-	for (struct node *proc = root->kids->next; !node_is_nil(proc); proc = proc->next) {
-		assert(proc->kind == node_kind_proc);
+static void codegen(struct entity *first_entity, FILE *file) {
+	for (struct entity *proc = first_entity; proc; proc = proc->next) {
+		assert(proc->kind == entity_kind_proc);
 		fprintf(file, ".global _%s\n", proc->name);
 		fprintf(file, ".align 2\n");
 		fprintf(file, "_%s:\n", proc->name);
@@ -143,8 +153,13 @@ static void codegen(struct node *root, FILE *file) {
 		fprintf(file, "\tmov x29, sp\n");
 		fprintf(file, "\tsub sp, sp, #%zu\n", locals_size);
 
-		struct node *body = node_find(proc, node_kind_block);
-		codegen_node(proc, body, file);
+		size_t reg = 0;
+		for (struct param *param = proc->first_param; param; param = param->next) {
+			fprintf(file, "\tstr x%zu, [x29, #-%zu]\n", reg, param->local->offset);
+			reg++;
+		}
+
+		codegen_node(proc, proc->body, file);
 
 		fprintf(file, ".L.%s.return:\n", proc->name);
 		fprintf(file, "\tadd sp, sp, #%zu\n", locals_size);

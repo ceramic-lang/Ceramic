@@ -11,6 +11,7 @@ enum token_kind {
 	token_kind_slash,
 	token_kind_caret,
 	token_kind_equal,
+	token_kind_comma,
 	token_kind_colon,
 	token_kind_semi,
 
@@ -36,6 +37,7 @@ static char *const token_kind_strings[] = {
         [token_kind_slash] = "“/”",
         [token_kind_caret] = "“^”",
         [token_kind_equal] = "“=”",
+        [token_kind_comma] = "“,”",
         [token_kind_colon] = "“:”",
         [token_kind_semi] = "“;”",
 
@@ -137,6 +139,7 @@ static struct tokens lex(char *s) {
 			        ['/'] = token_kind_slash,
 			        ['^'] = token_kind_caret,
 			        ['='] = token_kind_equal,
+			        [','] = token_kind_comma,
 			        [':'] = token_kind_colon,
 			        [';'] = token_kind_semi,
 			        ['('] = token_kind_lparen,
@@ -205,6 +208,14 @@ static struct node *node_find(struct node *node, enum node_kind kind) {
 		}
 	}
 	return result;
+}
+
+static size_t node_kid_count(struct node *node) {
+	size_t count = 0;
+	for (struct node *kid = node->kids->next; !node_is_nil(kid); kid = kid->next) {
+		count++;
+	}
+	return count;
 }
 
 static void node_print_with_indentation(struct node *node, size_t indentation) {
@@ -327,9 +338,14 @@ static struct node *parse_lhs(struct parser *p) {
 
 		case token_kind_lparen: {
 			struct token *lparen = bump(p, token_kind_lparen);
-			expect(p, token_kind_rparen);
 			struct node *call = node_create(node_kind_call, lparen);
 			node_add_kid(call, result);
+			while (!at(p, token_kind_rparen)) {
+				struct node *arg = parse_expr(p);
+				node_add_kid(call, arg);
+				if (!at(p, token_kind_rparen)) expect(p, token_kind_comma);
+			}
+			bump(p, token_kind_rparen);
 			result = call;
 			break;
 		}
@@ -460,7 +476,20 @@ static struct node *parse_proc(struct parser *p) {
 	proc->name = name_token->string;
 
 	expect(p, token_kind_lparen);
-	expect(p, token_kind_rparen);
+
+	while (!at(p, token_kind_rparen)) {
+		struct token *param_name = expect(p, token_kind_name);
+		struct node *param = node_create(node_kind_param, param_name);
+		param->name = param_name->string;
+		expect(p, token_kind_colon);
+		struct node *type_expr = parse_expr(p);
+		node_add_kid(param, type_expr);
+		node_add_kid(proc, param);
+
+		if (!at(p, token_kind_rparen)) expect(p, token_kind_comma);
+	}
+
+	bump(p, token_kind_rparen);
 
 	if (!at(p, token_kind_lbrace)) {
 		struct token *first_return_type_token = p->token;

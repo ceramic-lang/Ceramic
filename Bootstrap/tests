@@ -90,6 +90,23 @@ expect_equal "proc main() int { i: int; p := *i; p^ = 92; return i; }" "92"
 expect_equal "proc main() int { return a(); } proc a() int { return 5; }" "5"
 expect_equal "proc main() int { p(); return 2; } proc p() {}" "2"
 expect_equal "proc main() int { p(); return 2; } proc p() { return; }" "2"
+expect_equal "
+proc main() int {
+	return add(9, 2)
+}
+proc add(x: int, y: int) int {
+	return x + y
+}" "11"
+expect_equal "
+proc main() int {
+	n := 6
+	inc(*n)
+	return n
+}
+
+proc inc(p: *int) {
+	p^ = p^ + 1
+}" "7"
 
 expect_error "proc main() int { return 0 }" "1: expected “;”, found “}”"
 expect_error "\`" "1: invalid token “\`”"
@@ -145,5 +162,10 @@ expect_error "proc main() int { 1; }" "1: unused expression"
 expect_error "
 proc main() int { one(); }
 proc one() int { return 1; }" "2: unused expression"
+expect_error "proc main() int { p(1); } proc p() {}" "1: expected 0 arguments but found 1"
+expect_error "
+proc main() int { p(); }
+proc p(x: int, y: int, z: int) {}" "2: expected 3 arguments but found 0"
+expect_error "proc main() int { p(1); } proc p(x: *int) {}" "1: expected “*int” but found “int”"
 
 rm "$asm_path" "$executable_path"

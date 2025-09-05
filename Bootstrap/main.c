@@ -47,6 +47,6 @@ int main(int argc, char **argv) {
 	}
 
 	struct node *root = parse(buffer);
-	typecheck(root);
-	codegen(root, fopen(output_path, "w"));
+	struct entity *first_entity = typecheck(root);
+	codegen(first_entity, fopen(output_path, "w"));
 }

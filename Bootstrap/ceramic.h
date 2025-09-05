@@ -2,6 +2,7 @@ enum node_kind {
 	node_kind_nil,
 	node_kind_root,
 	node_kind_proc,
+	node_kind_param,
 	node_kind_local,
 	node_kind_type,
 	node_kind_initializer,
@@ -25,6 +26,7 @@ static char *const node_kind_strings[] = {
         [node_kind_nil] = "nil",
         [node_kind_root] = "root",
         [node_kind_proc] = "proc",
+        [node_kind_param] = "param",
         [node_kind_local] = "local",
         [node_kind_type] = "type",
         [node_kind_initializer] = "initializer",
@@ -71,7 +73,6 @@ struct node {
 
 	struct type *type;
 	struct local *local;
-	size_t locals_size;
 };
 
 static const struct node node_nil = {
@@ -81,9 +82,37 @@ static const struct node node_nil = {
 };
 
 static bool node_is_nil(struct node *node);
+static struct node *node_find(struct node *node, enum node_kind kind);
+static size_t node_kid_count(struct node *node);
 __attribute__((unused)) static void node_print(struct node *node);
 
 static struct node *parse(char *s);
-static void typecheck(struct node *root);
 
-static void codegen(struct node *root, FILE *file);
+struct param {
+	struct param *next;
+	char *name;
+	struct type *type;
+	struct local *local;
+};
+
+enum entity_kind {
+	entity_kind_proc,
+};
+
+struct entity {
+	struct entity *next;
+	enum entity_kind kind;
+	char *name;
+	struct node *node;
+
+	struct param *first_param;
+	size_t param_count;
+	struct type *return_type;
+	struct node *body;
+	struct local *first_local;
+	size_t locals_size;
+};
+
+static struct entity *typecheck(struct node *root);
+
+static void codegen(struct entity *first_entity, FILE *file);
