@@ -164,20 +164,31 @@ static void expect_types_equal(struct type *expected, struct type *actual, size_
 	error(line, "expected “%s” but found “%s”", type_print(expected), type_print(actual));
 }
 
-struct local_node {
-	struct local_node *next;
+struct symbol {
+	struct symbol *next;
 	struct local *local;
+	struct entity *entity;
 };
 
 struct scope {
 	struct scope *up;
-	struct local_node *first;
-	struct local_node *last;
+	struct symbol *first;
+	struct symbol *last;
 };
 
 static struct node *current_root;
 static struct entity *g_first_entity;
 static struct scope *deepest_scope;
+
+static char *symbol_name(struct symbol *symbol) {
+	char *result = 0;
+	if (symbol->local) {
+		result = symbol->local->name;
+	} else {
+		result = symbol->entity->name;
+	}
+	return result;
+}
 
 static void scope_push(void) {
 	struct scope *scope = calloc(1, sizeof(struct scope));
@@ -189,15 +200,41 @@ static void scope_pop(void) {
 	deepest_scope = deepest_scope->up;
 }
 
-static void scope_add(struct local *local) {
-	struct local_node *local_node = calloc(1, sizeof(struct local_node));
-	local_node->local = local;
-	if (deepest_scope->first) {
-		deepest_scope->last->next = local_node;
-	} else {
-		deepest_scope->first = local_node;
+static struct symbol *scope_find(char *name) {
+	struct symbol *result = 0;
+
+	for (struct scope *scope = deepest_scope; scope; scope = scope->up) {
+		for (struct symbol *symbol = scope->first; symbol; symbol = symbol->next) {
+			if (strcmp(name, symbol_name(symbol)) == 0) {
+				result = symbol;
+				goto done;
+			}
+		}
 	}
-	deepest_scope->last = local_node;
+
+done:
+	return result;
+}
+
+static void scope_add(struct symbol *symbol) {
+	if (deepest_scope->first) {
+		deepest_scope->last->next = symbol;
+	} else {
+		deepest_scope->first = symbol;
+	}
+	deepest_scope->last = symbol;
+}
+
+static void scope_add_local(struct local *local) {
+	struct symbol *symbol = calloc(1, sizeof(struct symbol));
+	symbol->local = local;
+	scope_add(symbol);
+}
+
+static void scope_add_entity(struct entity *entity) {
+	struct symbol *symbol = calloc(1, sizeof(struct symbol));
+	symbol->entity = entity;
+	scope_add(symbol);
 }
 
 static struct local *add_local(struct entity *proc, char *name, struct type *type) {
@@ -244,50 +281,21 @@ static void check_node(struct entity *proc, struct node *node) {
 		}
 
 		node->local = add_local(proc, node->name, type);
-		scope_add(node->local);
+		scope_add_local(node->local);
 		break;
 	}
 
 	case node_kind_name: {
-		bool found_match = false;
+		struct symbol *symbol = scope_find(node->name);
+		if (!symbol) error(node->line, "unknown name “%s”", node->name);
 
-		for (struct scope *scope = deepest_scope; scope; scope = scope->up) {
-			for (struct local_node *local_node = scope->first; local_node; local_node = local_node->next) {
-				struct local *local = local_node->local;
-				if (strcmp(local->name, node->name) == 0) {
-					node->local = local;
-					node->type = node->local->type;
-					found_match = true;
-					goto finish_checking_scopes;
-				}
-			}
-		}
-	finish_checking_scopes:
-
-		if (!found_match) {
-			for (struct entity *entity = g_first_entity; entity; entity = entity->next) {
-				assert(entity->kind == entity_kind_proc);
-				if (strcmp(entity->name, node->name) == 0) {
-					node->entity = entity;
-
-					struct type_node *first_param = 0;
-					struct type_node *last_param = 0;
-
-					for (struct param *param = entity->first_param; param; param = param->next) {
-						struct type_node *param_node = calloc(1, sizeof(struct type_node));
-						param_node->type = param->type;
-						type_list_push(&first_param, &last_param, param_node);
-					}
-
-					node->type = type_proc(first_param, entity->return_type);
-					found_match = true;
-					break;
-				}
-			}
-		}
-
-		if (!found_match) {
-			error(node->line, "unknown name “%s”", node->name);
+		if (symbol->local) {
+			node->local = symbol->local;
+			node->type = node->local->type;
+		} else {
+			assert(symbol->entity->kind == entity_kind_proc);
+			node->entity = symbol->entity;
+			node->type = node->entity->type;
 		}
 
 		break;
@@ -312,15 +320,15 @@ static void check_node(struct entity *proc, struct node *node) {
 	case node_kind_return: {
 		struct node *return_value = node->first;
 		if (node_is_nil(return_value)) {
-			if (proc->return_type) {
+			if (proc->type->inner) {
 				error(node->line, "missing return value");
 			}
 		} else {
-			if (!proc->return_type) {
+			if (!proc->type->inner) {
 				error(node->line, "cannot return value from procedure with no return value");
 			}
 			check_node(proc, return_value);
-			expect_types_equal(proc->return_type, return_value->type, return_value->line);
+			expect_types_equal(proc->type->inner, return_value->type, return_value->line);
 		}
 		break;
 	}
@@ -426,6 +434,8 @@ static struct entity *typecheck(struct node *root) {
 
 		struct param *first_param = 0;
 		struct param *last_param = 0;
+		struct type_node *first_param_type_node = 0;
+		struct type_node *last_param_type_node = 0;
 
 		struct node *params = node_find(node, node_kind_params);
 		for (struct node *kid = params->first; !node_is_nil(kid); kid = kid->next) {
@@ -440,16 +450,24 @@ static struct entity *typecheck(struct node *root) {
 				first_param = param;
 			}
 			last_param = param;
+
+			struct type_node *type_node = calloc(1, sizeof(struct type_node));
+			type_node->type = param->type;
+			type_list_push(&first_param_type_node, &last_param_type_node, type_node);
+
 			entity->param_count++;
 		}
 
 		entity->first_param = first_param;
-		entity->body = node_find(node, node_kind_block);
 
-		struct node *return_type = node_find(node, node_kind_type);
-		if (return_type) {
-			entity->return_type = type_from_expr(return_type->first);
+		struct type *return_type = 0;
+		struct node *return_type_expr = node_find(node, node_kind_type);
+		if (return_type_expr) {
+			return_type = type_from_expr(return_type_expr->first);
 		}
+		entity->type = type_proc(first_param_type_node, return_type);
+
+		entity->body = node_find(node, node_kind_block);
 
 		if (g_first_entity) {
 			last_entity->next = entity;
@@ -459,12 +477,18 @@ static struct entity *typecheck(struct node *root) {
 		last_entity = entity;
 	}
 
+	deepest_scope = 0;
+	scope_push();
 	for (struct entity *entity = g_first_entity; entity; entity = entity->next) {
 		assert(entity->kind == entity_kind_proc);
-		deepest_scope = 0;
+		scope_add_entity(entity);
+	}
+
+	for (struct entity *entity = g_first_entity; entity; entity = entity->next) {
+		assert(entity->kind == entity_kind_proc);
 		scope_push();
 		for (struct param *param = entity->first_param; param; param = param->next) {
-			scope_add(param->local);
+			scope_add_local(param->local);
 		}
 		check_node(entity, entity->body);
 		scope_pop();

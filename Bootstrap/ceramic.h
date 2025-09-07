@@ -120,7 +120,7 @@ struct entity {
 
 	struct param *first_param;
 	size_t param_count;
-	struct type *return_type;
+	struct type *type;
 	struct node *body;
 	struct local *first_local;
 	size_t locals_size;
