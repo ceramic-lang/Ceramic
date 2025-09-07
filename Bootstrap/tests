@@ -161,6 +161,7 @@ proc main() int {
 }
 proc inc(n: *int) { n^ = n^ + 1; }
 proc dec(n: *int) { n^ = n^ - 1; }" "101"
+expect_equal "proc main() int { { x := 92; return x; } { x: *int; } }" "92"
 
 expect_error "proc main() int { return 0 }" "1: expected “;”, found “}”"
 expect_error "\`" "1: invalid token “\`”"
@@ -229,5 +230,19 @@ proc main() int { p: proc(*int) = a; }
 proc a() int { return 0; }" "2: expected “proc(*int)” but found “proc() int”"
 expect_error "proc main() { p := *main; }" "1: cannot take address of procedure"
 expect_error "proc main() { 1(); }" "1: cannot call value of non-procedure type “int”"
+expect_error "
+proc a() int { x: int; return x; }
+proc b() int { return x; }" "3: unknown name “x”"
+expect_error "proc main() int { { x: int; } { return x; } }" "1: unknown name “x”"
+expect_error "
+proc main() int {
+	{
+		x: int
+		{
+			x = 2
+		}
+	}
+	return x
+}" "9: unknown name “x”"
 
 rm "$asm_path" "$executable_path"

@@ -164,8 +164,41 @@ static void expect_types_equal(struct type *expected, struct type *actual, size_
 	error(line, "expected “%s” but found “%s”", type_print(expected), type_print(actual));
 }
 
+struct local_node {
+	struct local_node *next;
+	struct local *local;
+};
+
+struct scope {
+	struct scope *up;
+	struct local_node *first;
+	struct local_node *last;
+};
+
 static struct node *current_root;
 static struct entity *g_first_entity;
+static struct scope *deepest_scope;
+
+static void scope_push(void) {
+	struct scope *scope = calloc(1, sizeof(struct scope));
+	scope->up = deepest_scope;
+	deepest_scope = scope;
+}
+
+static void scope_pop(void) {
+	deepest_scope = deepest_scope->up;
+}
+
+static void scope_add(struct local *local) {
+	struct local_node *local_node = calloc(1, sizeof(struct local_node));
+	local_node->local = local;
+	if (deepest_scope->first) {
+		deepest_scope->last->next = local_node;
+	} else {
+		deepest_scope->first = local_node;
+	}
+	deepest_scope->last = local_node;
+}
 
 static struct local *add_local(struct entity *proc, char *name, struct type *type) {
 	assert(proc->kind == entity_kind_proc);
@@ -211,20 +244,25 @@ static void check_node(struct entity *proc, struct node *node) {
 		}
 
 		node->local = add_local(proc, node->name, type);
+		scope_add(node->local);
 		break;
 	}
 
 	case node_kind_name: {
 		bool found_match = false;
 
-		for (struct local *local = proc->first_local; local; local = local->next) {
-			if (strcmp(local->name, node->name) == 0) {
-				node->local = local;
-				node->type = node->local->type;
-				found_match = true;
-				break;
+		for (struct scope *scope = deepest_scope; scope; scope = scope->up) {
+			for (struct local_node *local_node = scope->first; local_node; local_node = local_node->next) {
+				struct local *local = local_node->local;
+				if (strcmp(local->name, node->name) == 0) {
+					node->local = local;
+					node->type = node->local->type;
+					found_match = true;
+					goto finish_checking_scopes;
+				}
 			}
 		}
+	finish_checking_scopes:
 
 		if (!found_match) {
 			for (struct entity *entity = g_first_entity; entity; entity = entity->next) {
@@ -352,9 +390,11 @@ static void check_node(struct entity *proc, struct node *node) {
 	}
 
 	case node_kind_block:
+		scope_push();
 		for (struct node *kid = node->first; !node_is_nil(kid); kid = kid->next) {
 			check_node(proc, kid);
 		}
+		scope_pop();
 		break;
 
 	case node_kind_nil:
@@ -421,7 +461,13 @@ static struct entity *typecheck(struct node *root) {
 
 	for (struct entity *entity = g_first_entity; entity; entity = entity->next) {
 		assert(entity->kind == entity_kind_proc);
+		deepest_scope = 0;
+		scope_push();
+		for (struct param *param = entity->first_param; param; param = param->next) {
+			scope_add(param->local);
+		}
 		check_node(entity, entity->body);
+		scope_pop();
 	}
 
 	return g_first_entity;
