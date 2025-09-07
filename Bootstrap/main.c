@@ -1,5 +1,7 @@
+#include <stdalign.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +28,7 @@ __attribute__((format(printf, 2, 3))) _Noreturn static void error(size_t line, c
 }
 
 #include "ceramic.h"
+#include "arena.c"
 #include "parser.c"
 #include "type.c"
 #include "codegen.c"

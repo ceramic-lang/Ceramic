@@ -157,7 +157,7 @@ static struct tokens lex(char *s) {
 		}
 
 		size_t len = (size_t)(s - start);
-		char *token_string = calloc(len + 1, 1);
+		char *token_string = push_array(char, len + 1);
 		token.string = memcpy(token_string, start, len);
 		token.line = line;
 
@@ -183,7 +183,7 @@ static bool node_is_nil(struct node *node) {
 }
 
 static struct node *node_create(enum node_kind kind, struct token *token) {
-	struct node *node = calloc(1, sizeof(struct node));
+	struct node *node = push_struct(struct node);
 	node->kind = kind;
 	node->line = token ? token->line : 1;
 	node->next = (struct node *)&node_nil;
@@ -270,7 +270,7 @@ static struct token *bump(struct parser *p, enum token_kind kind) {
 	struct token *token = p->token;
 	p->remaining_tokens--;
 	if (p->remaining_tokens == 0) {
-		struct token *eof_token = calloc(1, sizeof(struct token));
+		struct token *eof_token = push_struct(struct token);
 		eof_token->kind = token_kind_eof;
 		eof_token->line = token->line;
 		p->token = eof_token;

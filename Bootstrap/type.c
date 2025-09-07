@@ -47,7 +47,7 @@ static struct type *type_intern(enum type_kind kind, struct type *inner, struct 
 	}
 
 	if (!result) {
-		result = calloc(1, sizeof(struct type));
+		result = push_struct(struct type);
 		result->kind = kind;
 		result->inner = inner;
 		result->first = first;
@@ -92,7 +92,7 @@ static struct type *type_from_expr(struct node *expr) {
 
 		for (struct node *param_expr = params_expr->first; !node_is_nil(param_expr);
 		        param_expr = param_expr->next) {
-			struct type_node *param = calloc(1, sizeof(struct type_node));
+			struct type_node *param = push_struct(struct type_node);
 			param->type = type_from_expr(param_expr);
 			type_list_push(&first_param, &last_param, param);
 		}
@@ -118,7 +118,7 @@ struct buf {
 static struct buf buf_make(void) {
 	struct buf result = {0};
 	result.capacity = 128;
-	result.s = calloc(result.capacity, sizeof(char));
+	result.s = push_array(char, result.capacity);
 	return result;
 }
 
@@ -191,7 +191,7 @@ static char *symbol_name(struct symbol *symbol) {
 }
 
 static void scope_push(void) {
-	struct scope *scope = calloc(1, sizeof(struct scope));
+	struct scope *scope = push_struct(struct scope);
 	scope->up = deepest_scope;
 	deepest_scope = scope;
 }
@@ -229,20 +229,20 @@ static void scope_add(struct symbol *symbol, size_t line) {
 }
 
 static void scope_add_local(struct local *local, size_t line) {
-	struct symbol *symbol = calloc(1, sizeof(struct symbol));
+	struct symbol *symbol = push_struct(struct symbol);
 	symbol->local = local;
 	scope_add(symbol, line);
 }
 
 static void scope_add_entity(struct entity *entity, size_t line) {
-	struct symbol *symbol = calloc(1, sizeof(struct symbol));
+	struct symbol *symbol = push_struct(struct symbol);
 	symbol->entity = entity;
 	scope_add(symbol, line);
 }
 
 static struct local *add_local(struct entity *proc, char *name, struct type *type) {
 	assert(proc->kind == entity_kind_proc);
-	struct local *local = calloc(1, sizeof(struct local));
+	struct local *local = push_struct(struct local);
 	local->next = proc->first_local;
 	local->name = name;
 	local->type = type;
@@ -430,7 +430,7 @@ static struct entity *typecheck(struct node *root) {
 	for (struct node *node = root->first; !node_is_nil(node); node = node->next) {
 		assert(node->kind == node_kind_proc);
 
-		struct entity *entity = calloc(1, sizeof(struct entity));
+		struct entity *entity = push_struct(struct entity);
 		entity->kind = entity_kind_proc;
 		entity->name = node->name;
 		entity->node = node;
@@ -442,7 +442,7 @@ static struct entity *typecheck(struct node *root) {
 
 		struct node *params = node_find(node, node_kind_params);
 		for (struct node *kid = params->first; !node_is_nil(kid); kid = kid->next) {
-			struct param *param = calloc(1, sizeof(struct param));
+			struct param *param = push_struct(struct param);
 			param->name = kid->name;
 			param->node = kid;
 			param->type = type_from_expr(kid->first);
@@ -455,7 +455,7 @@ static struct entity *typecheck(struct node *root) {
 			}
 			last_param = param;
 
-			struct type_node *type_node = calloc(1, sizeof(struct type_node));
+			struct type_node *type_node = push_struct(struct type_node);
 			type_node->type = param->type;
 			type_list_push(&first_param_type_node, &last_param_type_node, type_node);
 

@@ -1,3 +1,8 @@
+static void *push_size(size_t size, size_t align);
+
+#define push_array(T, count) ((T *)push_size((count) * sizeof(T), alignof(T)))
+#define push_struct(T) push_array(T, 1)
+
 enum node_kind {
 	node_kind_nil,
 	node_kind_root,
