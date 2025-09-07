@@ -104,6 +104,7 @@ static struct node *parse(char *s);
 struct param {
 	struct param *next;
 	char *name;
+	struct node *node;
 	struct type *type;
 	struct local *local;
 };

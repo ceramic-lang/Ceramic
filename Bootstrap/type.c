@@ -216,7 +216,10 @@ done:
 	return result;
 }
 
-static void scope_add(struct symbol *symbol) {
+static void scope_add(struct symbol *symbol, size_t line) {
+	char *name = symbol_name(symbol);
+	if (scope_find(name)) error(line, "cannot redefine symbol “%s”", name);
+
 	if (deepest_scope->first) {
 		deepest_scope->last->next = symbol;
 	} else {
@@ -225,16 +228,16 @@ static void scope_add(struct symbol *symbol) {
 	deepest_scope->last = symbol;
 }
 
-static void scope_add_local(struct local *local) {
+static void scope_add_local(struct local *local, size_t line) {
 	struct symbol *symbol = calloc(1, sizeof(struct symbol));
 	symbol->local = local;
-	scope_add(symbol);
+	scope_add(symbol, line);
 }
 
-static void scope_add_entity(struct entity *entity) {
+static void scope_add_entity(struct entity *entity, size_t line) {
 	struct symbol *symbol = calloc(1, sizeof(struct symbol));
 	symbol->entity = entity;
-	scope_add(symbol);
+	scope_add(symbol, line);
 }
 
 static struct local *add_local(struct entity *proc, char *name, struct type *type) {
@@ -281,7 +284,7 @@ static void check_node(struct entity *proc, struct node *node) {
 		}
 
 		node->local = add_local(proc, node->name, type);
-		scope_add_local(node->local);
+		scope_add_local(node->local, node->line);
 		break;
 	}
 
@@ -441,6 +444,7 @@ static struct entity *typecheck(struct node *root) {
 		for (struct node *kid = params->first; !node_is_nil(kid); kid = kid->next) {
 			struct param *param = calloc(1, sizeof(struct param));
 			param->name = kid->name;
+			param->node = kid;
 			param->type = type_from_expr(kid->first);
 			param->local = add_local(entity, param->name, param->type);
 
@@ -481,14 +485,14 @@ static struct entity *typecheck(struct node *root) {
 	scope_push();
 	for (struct entity *entity = g_first_entity; entity; entity = entity->next) {
 		assert(entity->kind == entity_kind_proc);
-		scope_add_entity(entity);
+		scope_add_entity(entity, entity->node->line);
 	}
 
 	for (struct entity *entity = g_first_entity; entity; entity = entity->next) {
 		assert(entity->kind == entity_kind_proc);
 		scope_push();
 		for (struct param *param = entity->first_param; param; param = param->next) {
-			scope_add_local(param->local);
+			scope_add_local(param->local, param->node->line);
 		}
 		check_node(entity, entity->body);
 		scope_pop();

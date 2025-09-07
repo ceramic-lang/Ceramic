@@ -244,5 +244,25 @@ proc main() int {
 	}
 	return x
 }" "9: unknown name “x”"
+expect_error "
+proc a() {}
+proc a() {}" "3: cannot redefine symbol “a”"
+expect_error "
+proc p(
+	x: int,
+	x: *int,
+) {}" "4: cannot redefine symbol “x”"
+expect_error "
+proc main() int {
+	x: *int
+	x: int
+}" "4: cannot redefine symbol “x”"
+expect_error "
+proc main() int {
+	x: *int
+	{
+		x: int
+	}
+}" "5: cannot redefine symbol “x”"
 
 rm "$asm_path" "$executable_path"
